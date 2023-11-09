@@ -1,0 +1,1372 @@
+---
+title: 'Larval data analysis'
+output:  
+  html_document:
+    code_fold: hide
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r, libraries}
+
+# Notes on CTD, cruise IDs have an added L, sometimes CTD casts are not 
+# sequential, what would this be? Is it all downcasts? 
+#
+# Loading packages and data
+library(ggplot2)
+library(ecodata)
+library(lubridate)
+library(dplyr)
+library(stringr)
+library(marmap) # bathymetry
+library(RColorBrewer)
+library(ggnewscale)
+library(sf)
+library(cowplot)
+library(tidyr)
+library(raster)
+# Larval data
+
+larva <- read.csv(here::here('data/larval/Malacanthidae_all_lengthdata_Oct2023.csv'))
+names(larva) <- tolower(names(larva))
+larva <- larva %>%
+    mutate(date = lubridate::dmy_hms(event_date),
+      year = lubridate::year(date),
+           month = lubridate::month(date),
+           week = lubridate::week(date), 
+           day = lubridate::day(date)) %>% 
+  rename(cruise_id = cruise_name)
+
+larva.w.zeros <- read.csv(here::here('data/larval/Malacanthidae_all_with0s_Oct2023.csv'))
+names(larva.w.zeros) <- tolower(names(larva.w.zeros))
+larva.w.zeros <- larva.w.zeros %>%
+    mutate(date = lubridate::dmy_hms(event_date),
+      year = lubridate::year(date),
+           month = lubridate::month(date),
+           week = lubridate::week(date), 
+           day = lubridate::day(date)) %>% 
+  rename(cruise_id = cruise_name)
+
+# CTD data
+ctd <- read.csv(here::here('data/larval/ctd_erddap_oct2023.csv'))
+ctd_meta <- ctd[1,]
+ctd <- ctd[-1,]
+names(ctd) <- tolower(names(ctd))
+ctd <- ctd %>%
+    mutate(date = lubridate::ymd_hms(utc_date),
+      year = lubridate::year(date),
+           month = lubridate::month(date),
+           week = lubridate::week(date), 
+           day = lubridate::day(date), 
+      depth = as.numeric(depth), 
+      pressure_dbars = as.numeric(pressure_dbars), 
+      sea_water_temperature = as.numeric(sea_water_temperature),
+      sea_water_salinity = as.numeric(sea_water_salinity))
+
+# loading in shape files 
+wd = here::here('shapefiles')
+US.areas <- rgdal::readOGR(wd, 'USA', verbose = FALSE)
+canada.areas <-rgdal::readOGR(wd,'Canada', verbose = FALSE)
+US.areas <- US.areas %>% st_as_sf()
+canada.areas <- canada.areas %>% st_as_sf()
+
+bathy <- marmap::getNOAA.bathy(-81,-58, 27, 46)
+bathy = fortify.bathy(bathy)
+
+jet.colors <-colorRampPalette(c("blue", "#007FFF", "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+# How can we join these datasets? Cast_number, purpose_code, date, lat/lon
+```
+
+### Initial exploration of larval data
+
+Distribution of larval lengths. Yellow background indicates newly hatched larvae
+(freshies), orange indicates pelagic stage of larvae (pelagic) and grey background 
+represents the size at which pelagic juveniles settle to the bottom (settlers). 
+
+```{r, init plots}
+#range(larva$length)
+ggplot(larva,
+       aes(x = length, y = count_at_length)) + 
+   geom_rect(aes(xmin = 0, xmax = 2.8, ymin = -Inf, ymax = Inf), 
+            fill = 'goldenrod1', alpha = 0.5) +
+  geom_rect(aes(xmin = 2.9, xmax = 8.9, ymin = -Inf, ymax = Inf), 
+            fill = '#CC7722', alpha = 0.5) +
+  geom_rect(aes(xmin = 9.0, xmax = 15, ymin = -Inf, ymax = Inf), 
+            fill = 'grey34', alpha = 0.5) +
+   geom_bar(stat = 'identity', 
+           fill= 'slateblue', color="black") + 
+  xlab('Tilefish larval lengths (mm)') +
+  xlim(0,15.0) +
+  theme_bw() +
+   theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1),
+         axis.text.y = element_text(color = 'black',
+                                   size = 12)) +
+  theme_facet()
+```
+
+Range of years: `r range(larva$year)`
+Range of depth: `r range(larva$bottom_depth)`
+
+```{r, init plots 2}
+
+ttl_larv <- larva %>% 
+  dplyr::select(total_count, year, event_number, taxa_ichthyo) %>% 
+  group_by(year, event_number, taxa_ichthyo) %>%
+  summarise(n = sum(total_count))
+ttl_larv2 <- ttl_larv %>% 
+  group_by(year, taxa_ichthyo) %>%
+  summarise(ttl = sum(n))
+ggplot(larva,
+       aes(x = year)) + 
+  geom_bar(position = position_dodge(), 
+           fill= 'darkslategray4', color="black") + 
+  xlab('Year') +
+  ylab('Number of tilefish larval events') +
+  labs(title = 'Larval events') +
+  facet_wrap(~taxa_ichthyo)+
+   theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  theme_facet()
+
+ggplot(ttl_larv2,
+       aes(x = factor(year), y = ttl)) + 
+  geom_bar(stat = 'identity', fill = 'goldenrod1', color = 'black') + 
+  xlab('Year') +
+  ylab('Total count tilefish larvae') +
+  labs(title = 'Larval counts') +
+  facet_wrap(~taxa_ichthyo)+
+   theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  theme_facet()
+
+```
+
+Looking to see if/how the number of events at particular depth has a seasonal 
+pattern
+
+```{r, init plots 3}
+
+# may be better represented as the proportion of events at each depth
+# ggplot(larva,
+#        aes(x = bottom_depth)) + 
+#   geom_bar(position = position_dodge(), 
+#            fill= 'blue4', color="black") + 
+#   xlab('Bottom depth') +
+#   ylab('Events at depth') +
+#   theme_facet()
+
+
+
+# Looking to see if catch depth changes by month
+
+lv.tally <- larva %>% # aggregate by year
+  group_by(month, event_number, bottom_depth) %>% 
+  summarise(ttl_depth = length(bottom_depth),
+            ttl_event = length(event_number))
+
+ggplot(lv.tally,
+       aes(x = bottom_depth, y = ttl_event)) + 
+  geom_bar(stat = 'identity', fill= 'blue4', color="black") + 
+  xlab('Bottom depth') +
+  ylab('Events at depth') +
+  xlim(0,300) +
+  facet_wrap(~month) +
+  theme_facet()
+
+
+```
+
+
+### Exploring spatial distribution of larval lengths 
+
+Larval lengths range from `r min(range(larva$length))` to 
+`r max(range(larva$length))`
+Larval stages are binned according to lengths as indicated below, with the 
+smallest larvae representing the newly hatched stage, the mid-size representing 
+the pelagic stage and the largest larvae representing the stage at which they 
+settle to the bottom. 
+
++ freshies <- length <= 2.8 (YELLOW CIRCLE)
++ pelagic <- length <= 8.9 (ORANGE TRIANGLE)
++ settlers <- length >= 9.0 (GREY SQUARE)
+
+```{r, map 1}
+freshies <- subset(larva, length <= 2.8)
+pelagic <- subset(larva, length <= 8.99)
+settlers <- subset(larva, length >= 9.0)
+
+## Latitudinal range x size
+
+# range(freshies$latitude)
+# # 26.9800 39.8367
+# range(pelagic$latitude)
+# # 26.9800 41.0667
+# range(settlers$latitude)
+# # 32.388 41.160
+
+## Longitudinal range x size
+
+# range(freshies$longitude)
+# # -79.920 -72.505
+# range(pelagic$longitude)
+# # -80.9000 -66.8083
+# range(settlers$longitude)
+# # -79.0007 -64.9900
+
+### try to plot freshies vs pelagic vs settlers 
+ggplot(freshies, aes(x=longitude, y = latitude))+
+geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'black')+
+  geom_point(pch = 21, bg = '#FCE205', col = 'black', size = 3) +
+  labs(title = 'Newly hatched') +
+  xlab('Longitude') +
+  ylab('Latitude') +
+  facet_wrap(~year) +
+  theme_bw()
+
+ggplot(pelagic, aes(x=longitude, y = latitude))+
+geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'black')+
+  geom_point(pch = 24, bg = '#CC7722', col = 'black', size = 3) +
+  labs(title = 'Pelagic larvae') +
+  xlab('Longitude') +
+  ylab('Latitude') +
+  facet_wrap(~year) +
+  theme_bw()
+
+ggplot(freshies, aes(x=longitude, y = latitude))+
+geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'black')+
+  geom_point(pch = 22, bg = 'grey34', col = 'black', size = 3) +
+  labs(title = 'Settlers') +
+  xlab('Longitude') +
+  ylab('Latitude') +
+  facet_wrap(~year) +
+  theme_bw()
+
+
+
+# pch 21 = circle, 22 = square, 23 = diamond, 24 = triangle  
+# dijon = #C49102, ochre = #CC7722, honey = #FFC30B, bumblebee = #FCE205, 
+# sage= #759c8a, #738678, #cbdbcd
+
+
+
+
+```
+
+All larval lengths. Shape and color distinguish larval stage and possible
+location in the water column. First map is across all larval samples across
+all years. The second map is all samples by month. 
+
++ Freshies = Yellow circles, 
++ Pelagic = Orange triangles
++ Settlers = Grey squares  
+
+```{r, map 2}
+ggplot() +
+  geom_sf(data=US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  coord_sf(xlim = c(-81,-66.0), ylim = c(26,43), datum = sf::st_crs(4326))  +
+  geom_point(data = pelagic, aes(x=longitude, y = latitude), 
+             pch = 24, bg = '#CC7722', color = 'black', size = 3) +
+  geom_point(data = settlers, aes(x=longitude, y = latitude),
+             pch = 22, bg = 'grey34', color = 'black', size = 3) +
+  geom_point(data = freshies, aes(x=longitude, y = latitude),
+             pch = 21, bg = '#FCE205', color = 'black', size = 3) +
+  xlab('Longitude') +
+  ylab('Latitude') +
+  theme_bw()
+
+ggplot() +
+  geom_sf(data=US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  coord_sf(xlim = c(-81,-66.0), ylim = c(26,43), datum = sf::st_crs(4326))  +
+  geom_point(data = pelagic, aes(x=longitude, y = latitude), 
+             pch = 24, bg = '#CC7722', color = 'black', size = 3) +
+  geom_point(data = settlers, aes(x=longitude, y = latitude),
+             pch = 22, bg = 'grey34', color = 'black', size = 3) +
+  geom_point(data = freshies, aes(x=longitude, y = latitude),
+             pch = 21, bg = '#FCE205', color = 'black', size = 3) +
+  xlab('Longitude') +
+  ylab('Latitude') +
+  facet_wrap(~month) +
+  theme_bw()
+
+```
+
+### Selecting CTD casts from larval events in 2021
+
+
+```{r}
+sst <- brick(here::here('data/sst/ww_sst_2021.tif'))
+larvae.21 <- subset(larva, year == 2021)
+events.21 <- data.frame(event_number = larvae.21$event_number, 
+                        week = larvae.21$week)
+event.weeks <- sort(unique(larvae.21$week))
+
+```
+
+
+```{r}
+ids.21 = unique(larvae.21$cruise_id)
+ctd.21 = read.csv('ocdbs_v_erddap1_0a39_d12f_baca_2021.csv')
+names(ctd.21) <- tolower(names(ctd.21))
+ctd.21 = ctd.21 %>% filter(cruise_id %in% ids.21) %>%
+    mutate(date = lubridate::ymd_hms(utc_date),
+      # year = lubridate::year(date),
+      #      month = lubridate::month(date),
+      #      week = lubridate::week(date), 
+      #      day = lubridate::day(date), 
+      depth = as.numeric(depth), 
+      pressure_dbars = as.numeric(pressure_dbars), 
+      sea_water_temperature = as.numeric(sea_water_temperature),
+      sea_water_salinity = as.numeric(sea_water_salinity)) %>% 
+  dplyr::select(date,cruise_id, cast_number,purpose_code,
+                latitude, longitude,
+                pressure_dbars, sea_water_temperature, sea_water_salinity) %>% 
+  na.omit()
+
+```
+
+Cruise HB2103 had 202 unique CTD casts. Larvae were found at 3 locations for
+this cruise. The following plots are the paired CTD casts (12,10,67) at the 
+locations where there were larval events. 
+
+#### Event 37: (37.0367, -74.9733), Week 37 2021
+Station 3291, plankton stratum 5, bottom depth:46
+
++ Total_count = 3 
++ Count_at_length = 1 
++ Lengths = 5.5, 5.8, 6.4 (pelagic)
+
+```{r,events 1}
+
+b = sst[[37]]
+df <- raster::as.data.frame(b, xy=TRUE) %>% drop_na() 
+ggplot() +
+  geom_tile(data = df, aes(x=x, y=y, fill = ww_sst_2021_37)) + 
+  scale_fill_gradientn(colours = jet.colors(25)) +
+  geom_sf(data=US.areas %>% st_as_sf(),color = 'gray20', fill = 'lightgrey') +
+   geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  geom_point(data = larvae.21 %>% filter(week == 37 & event_number == 37), 
+             aes(x=longitude, y = latitude), size = 3) + 
+  # coord_sf(xlim = c(-81,-66.0), ylim = c(26,43), datum = sf::st_crs(4326))  +
+  coord_sf(xlim = c(-76,-66.0), ylim = c(35,43), datum = sf::st_crs(4326)) +
+  xlab('Longitude') +
+  ylab('Latitude') 
+
+
+HB2103 <- subset(ctd.21, cruise_id == 'HB2103')
+#`r length(unique(HB2103$cast_number))`
+coords <- which(HB2103$latitude == 37.0367 & HB2103$longitude == -74.9733)
+HB2103.event37 = HB2103[coords,]
+# event 37, total_count = 3, count_at_length = 1, lengths = 5.5, 5.8, 6.4
+
+# ** Note there are two event 37s, and the coordinates below do not match any
+# for the trip ID HB2103
+# coords <- which(HB2103$latitude == 40.5000 & HB2103$longitude == -70.8283)
+# HB2103.event37.2 = HB2103[coords,]
+
+## EVENT 37.1
+temp = ggplot(HB2103.event37, 
+              aes(x = (sea_water_temperature),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+       y = expression(~Pressure~(dbar))) #title = 'HB2103.event37'
+sal =  ggplot(HB2103.event37,
+              aes(x = (sea_water_salinity),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(~Pressure~(dbar)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+#### Event 35 (37.1183, -74.8417), week 37 2021
+
+**Station 3007, plankton stratum 5, bottom_depth:59**
+
++ Total_count = says 14, only 12 values 
++ Count_at_length = 1 
++ Lengths = 1.5, 1.6, 1.7(x2), 1.8, 2.0, 2.1, 2.3, 2.5, 2.8, 3.0, 4.3
++ 10 freshies, 2 pelagic
+
+```{r}
+b = sst[[37]]
+df <- raster::as.data.frame(b, xy=TRUE) %>% drop_na() 
+ggplot() +
+  geom_tile(data = df, aes(x=x, y=y, fill = ww_sst_2021_37)) + 
+  scale_fill_gradientn(colours = jet.colors(25)) +
+  geom_sf(data=US.areas %>% st_as_sf(),color = 'gray20', fill = 'lightgrey') +
+   geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  geom_point(data = larvae.21 %>% filter(week == 37 & event_number == 35), 
+             aes(x=longitude, y = latitude), size = 3) + 
+  # coord_sf(xlim = c(-81,-66.0), ylim = c(26,43), datum = sf::st_crs(4326))  +
+  coord_sf(xlim = c(-76,-66.0), ylim = c(35,43), datum = sf::st_crs(4326)) +
+  xlab('Longitude') +
+  ylab('Latitude') 
+
+HB2103 <- subset(ctd.21, cruise_id == 'HB2103')
+e35 <- subset(larvae.21, event_number == 35)
+e35 <- sort(unique(e35$length))
+# lat lon 37.1183 -74.8417
+
+coords <- which(HB2103$latitude == 37.1183 & HB2103$longitude == -74.8417)
+HB2103.event35 = HB2103[coords,]
+
+temp = ggplot(HB2103.event35, 
+              aes(x = (sea_water_temperature),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+       y = expression(~Pressure~(dbar)))
+sal =  ggplot(HB2103.event35,
+              aes(x = (sea_water_salinity),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(~Pressure~(dbar)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+
+#### Event 185 (40.7333, -71.5183), Week 39, 2021 
+
+**Station 3318, plankton stratum 19, bottom_depth:65**
+
++ Total_count = 1 
++ Count_at_length = 1 
++ Lengths = 7.8, pelagic
+
+```{r}
+b = sst[[39]]
+df <- raster::as.data.frame(b, xy=TRUE) %>% drop_na() 
+ggplot() +
+  geom_tile(data = df, aes(x=x, y=y, fill = ww_sst_2021_39)) + 
+  scale_fill_gradientn(colours = jet.colors(25)) +
+  geom_sf(data=US.areas %>% st_as_sf(),color = 'gray20', fill = 'lightgrey') +
+   geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  geom_point(data = larvae.21 %>% filter(week == 39 & event_number == 185), 
+             aes(x=longitude, y = latitude), size = 3) + 
+  # coord_sf(xlim = c(-81,-66.0), ylim = c(26,43), datum = sf::st_crs(4326))  +
+  coord_sf(xlim = c(-76,-66.0), ylim = c(35,43), datum = sf::st_crs(4326)) +
+  xlab('Longitude') +
+  ylab('Latitude') 
+
+HB2103 <- subset(ctd.21, cruise_id == 'HB2103')
+e185 <- subset(larvae.21, event_number == 185)
+e185 <- sort(unique(e185$length))
+# lat lon 37.1183 -74.8417
+
+coords <- which(HB2103$latitude == 40.7333 & HB2103$longitude == -71.5183)
+HB2103.event185 = HB2103[coords,]
+
+temp = ggplot(HB2103.event185, 
+              aes(x = (sea_water_temperature),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+       y = expression(~Pressure~(dbar)))
+sal =  ggplot(HB2103.event185,
+              aes(x = (sea_water_salinity),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(~Pressure~(dbar)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+#### Event 215 (41.1600,-64.9900), Week 32 2021
+
+**Station 171, plankton stratum NA, bottom depth 3401**
+
++ Total_count = 1 
++ Count_at_length = 1 
++ Lengths = 13.7, settler
+
+** NOTE there is not a ctd cast for this cruise_id (HB2102) - actually i 
+think i just cropped it out...need to re-pull
+
+```{r}
+b = sst[[32]]
+df <- raster::as.data.frame(b, xy=TRUE) %>% drop_na() 
+ggplot() +
+  geom_tile(data = df, aes(x=x, y=y, fill = ww_sst_2021_32)) + 
+  scale_fill_gradientn(colours = jet.colors(25)) +
+  geom_sf(data=US.areas %>% st_as_sf(),color = 'gray20', fill = 'lightgrey') +
+   geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  geom_point(data = larvae.21 %>% filter(week == 32 & event_number == 215), 
+             aes(x=longitude, y = latitude), size = 3) + 
+  # coord_sf(xlim = c(-81,-66.0), ylim = c(26,43), datum = sf::st_crs(4326))  +
+  coord_sf(xlim = c(-76,-63.0), ylim = c(35,43), datum = sf::st_crs(4326)) +
+  xlab('Longitude') +
+  ylab('Latitude') 
+
+HB2102 <- subset(ctd.21, cruise_id == 'HB2102')
+e215 <- subset(larvae.21, event_number == 215)
+e215 <- sort(unique(e215$length))
+# lat lon 37.1183 -74.8417
+
+# coords <- which(HB2102$latitude == 41.1600 & HB2102$longitude == -64.9900)
+# HB2102.event215 = HB2102[coords,]
+# 
+# temp = ggplot(HB2102.event215, 
+#               aes(x = (sea_water_temperature),
+#                   y = (pressure_dbars))) +  
+#   geom_point(color = 'red') +
+#   geom_path(col = 'red') +
+#   scale_x_continuous(position = "top") +
+#   scale_y_reverse() + 
+#   theme_bw() + 
+#   theme(axis.text = element_text(size = 12, colour = 1),
+#         axis.title = element_text(size = 14, colour = 1))+
+#   labs(x = expression(~Temperature~(degree~C)),
+#        y = expression(~Pressure~(dbar)))
+# sal =  ggplot(HB2102.event215,
+#               aes(x = (sea_water_salinity),
+#                   y = (pressure_dbars))) +  
+#   geom_point(color = 'blue') +
+#   geom_path(col = 'blue') +
+#   scale_x_continuous(position = "top")+
+#   scale_y_reverse() + 
+#   theme_bw() + 
+#   theme(axis.text = element_text(size = 12, colour = 1),
+#         axis.title = element_text(size = 14, colour = 1))+
+#   labs(x = expression(~Practical~salinity),
+#        y = expression(~Pressure~(dbar)))
+# 
+# cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+#### Event 10 (39.8367,-72.5050), Week  
+
+**Station 10, plankton stratum 15, bottom depth 65**
+
++ Total_count = 1 
++ Count_at_length = 1 
++ Lengths = 2.5, freshie
+
+
+```{r, eval = FALSE}
+b = sst[[42]]
+df <- raster::as.data.frame(b, xy=TRUE) %>% drop_na() 
+ggplot() +
+  geom_tile(data = df, aes(x=x, y=y, fill = ww_sst_2021_42)) + 
+  scale_fill_gradientn(colours = jet.colors(25)) +
+  geom_sf(data=US.areas %>% st_as_sf(),color = 'gray20', fill = 'lightgrey') +
+   geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  geom_point(data = larvae.21 %>% filter(week == 42 & event_number == 10), 
+             aes(x=longitude, y = latitude), size = 3) + 
+  # coord_sf(xlim = c(-81,-66.0), ylim = c(26,43), datum = sf::st_crs(4326))  +
+  coord_sf(xlim = c(-76,-66.0), ylim = c(35,43), datum = sf::st_crs(4326)) +
+  xlab('Longitude') +
+  ylab('Latitude') 
+
+PC2106 <- subset(ctd.21, cruise_id == 'PC2106')
+e10 <- subset(larvae.21, event_number == 10)
+e10 <- sort(unique(e10$length))
+# lat lon 37.1183 -74.8417
+
+coords <- which(PC2106$latitude == 39.8367 & PC2106$longitude == -72.5050)
+PC2106.event10 = PC2106[coords,]
+
+temp = ggplot(PC2106.event10, 
+              aes(x = (sea_water_temperature),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+       y = expression(~Pressure~(dbar)))
+sal =  ggplot(PC2106.event10,
+              aes(x = (sea_water_salinity),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(~Pressure~(dbar)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+### CTD Casts w/out larval events 2021 
+
+#### CTD Cast 48 (40.3033, -72.2967) 
+
+Exploring a location without a larval event
+
+Purpose code 10
+
+```{r}
+HB2103 <- subset(ctd.21, cruise_id == 'HB2103')
+coords <- which(HB2103$latitude == 40.3033 & HB2103$longitude == -72.2967)
+HB2103.c48 = HB2103[coords,]
+HB2103.c48.p <- HB2103.c48[1,]
+b = sst[[39]]
+df <- raster::as.data.frame(b, xy=TRUE) %>% drop_na()
+ggplot() +
+  geom_tile(data = df, aes(x=x, y=y, fill = ww_sst_2021_39)) + 
+  scale_fill_gradientn(colours = jet.colors(25)) +
+  geom_sf(data=US.areas %>% st_as_sf(),color = 'gray20', fill = 'lightgrey') +
+   geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  geom_point(data = HB2103 %>% filter(cast_number == 48 & purpose_code == 48), 
+             aes(x=longitude, y = latitude), size = 3) + 
+  # coord_sf(xlim = c(-81,-66.0), ylim = c(26,43), datum = sf::st_crs(4326))  +
+  coord_sf(xlim = c(-76,-63.0), ylim = c(35,43), datum = sf::st_crs(4326)) +
+  xlab('Longitude') +
+  ylab('Latitude') 
+
+
+
+# lat lon 37.1183 -74.8417
+temp = ggplot(HB2103.c48, 
+              aes(x = (sea_water_temperature),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+       y = expression(~Pressure~(dbar)))
+sal =  ggplot(HB2103.c48,
+              aes(x = (sea_water_salinity),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(~Pressure~(dbar)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+
+#### CTD Cast 2 (39.2133,-73.3317), Week 37 2021
+
+Exploring a location without a larval event
+
+Purpose code 10
+
+```{r}
+HB2103 <- subset(ctd.21, cruise_id == 'HB2103')
+larv.cruise.id.21 <- sort(unique(larvae.21$cruise_id))
+# lat lon 37.1183 -74.8417
+cruise.id.21 <- sort(unique(ctd.21$cruise_id))
+
+coords <- which(HB2103$latitude == 39.2133 & HB2103$longitude == -73.3317)
+HB2103.c2 = HB2103[coords,]
+b = sst[[37]]
+df <- raster::as.data.frame(b, xy=TRUE) %>% drop_na()
+# ggplot() +
+#   geom_tile(data = df, aes(x=x, y=y, fill = ww_sst_2021_37)) + 
+#   scale_fill_gradientn(colours = jet.colors(25)) +
+#   geom_sf(data=US.areas %>% st_as_sf(),color = 'gray20', fill = 'lightgrey') +
+#    geom_contour(data = bathy,
+#                aes(x=x,y=y,z=-1*z),
+#                breaks=c(50,100,150,200, Inf),
+#                size=c(0.3),
+#                col = 'darkgrey') +
+#   geom_point(data = HB2103 %>% filter(cast_number == 2 & purpose_code == 10), 
+#              aes(x=longitude, y = latitude), size = 3) + 
+#   # coord_sf(xlim = c(-81,-66.0), ylim = c(26,43), datum = sf::st_crs(4326))  +
+#   coord_sf(xlim = c(-76,-63.0), ylim = c(35,43), datum = sf::st_crs(4326)) +
+#   xlab('Longitude') +
+#   ylab('Latitude') 
+
+temp = ggplot(HB2103.c2, 
+              aes(x = (sea_water_temperature),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+       y = expression(~Pressure~(dbar)))
+sal =  ggplot(HB2103.c2,
+              aes(x = (sea_water_salinity),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(~Pressure~(dbar)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+### CTD Casts w/out larval events 1990s 
+
+
+#### 1993 CTD Cast 178 (41.6233, -69.2467) 
+
+Exploring a location without a larval event (1993)
+
+Cruise id = ALB9304, Cast 178
+Bottom depth 178, gear type = SBE-19
+
+
+```{r}
+ctd.93 <- subset(ctd, year == 1993)
+ALB9304 <- subset(ctd.93, cruise_id == 'ALB9304')
+larv.93 <-subset(larva, year == 1993)
+# sort(unique(larv.93$cruise_id)) 
+# Larval events
+ev.1591 <- subset(larv.93, cruise_id == "DE9311") # 40.5500, -70.9500, length 3.9
+
+ev.2361 <- subset(larv.93, cruise_id == "DE9311")# 41.0667, -66.8167, length 5.5
+
+
+coords <- which(ALB9304$latitude == 41.6233 & ALB9304$longitude == -69.2467)
+ALB9304.c178 = ALB9304[coords,]
+
+temp = ggplot(ALB9304.c178, 
+              aes(x = (sea_water_temperature),
+  y = (pressure_dbars))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+       y = expression(~Pressure~(dbar)))
+sal =  ggplot(ALB9304.c178,
+              aes(x = (sea_water_salinity),
+  y = (pressure_dbars))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+        y = expression(~Pressure~(dbar)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+
+
+
+```
+
+
+#### 1993 CTD Cast 14 (42.6067, -68.2833) 
+
+Exploring a location without a larval event (1993)
+
+Cruise id = DEL9308, Cast 14
+Bottom depth 184, gear type = SBE-19
+
+
+```{r}
+DEL9308 <- subset(ctd.93, cruise_id == 'DEL9308')
+coords <- which(DEL9308$latitude == 42.6067 & DEL9308$longitude == -68.2833)
+DEL9308.c14 = DEL9308[coords,]
+
+temp = ggplot(DEL9308.c14, 
+              aes(x = (sea_water_temperature),
+  y = (pressure_dbars))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+       y = expression(~Pressure~(dbar)))
+sal =  ggplot(DEL9308.c14,
+              aes(x = (sea_water_salinity),
+  y = (pressure_dbars))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+        y = expression(~Pressure~(dbar)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+
+
+
+```
+
+
+#### 1993 CTD Cast 270 (42.9,-67.4133) 
+
+Exploring a location without a larval event (1993)
+
+Cruise id = DEL9311, Cast 270
+Bottom depth 260, gear type = SBE-19
+
+
+```{r}
+DEL9311 <- subset(ctd.93, cruise_id == 'DEL9311')
+coords <- which(DEL9311$latitude == 42.9 & DEL9311$longitude == -67.4133)
+DEL9311.c270 = DEL9311[coords,]
+
+temp = ggplot(DEL9311.c270, 
+              aes(x = (sea_water_temperature),
+  y = (pressure_dbars))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+       y = expression(~Pressure~(dbar)))
+sal =  ggplot(DEL9311.c270,
+              aes(x = (sea_water_salinity),
+  y = (pressure_dbars))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+        y = expression(~Pressure~(dbar)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+
+
+
+```
+
+
+
+
+
+
+```{r, eval = FALSE}
+##### CTD Casts with larval events 1990s 
+# This is the other type of larvae
+
+###### 1993 Event 1591 (40.5500, -70.9500) 
+
+# Exploring a location with a larval event (1993)
+# 
+# Cruise id = DE9311, Cast 178
+# Bottom depth 73, gear type = SBE-19
+
+ctd.93 <- subset(ctd, year == 1993)
+DE9311 <- subset(ctd.93, cruise_id == 'DEL9311')
+larv.93 <-subset(larva, year == 1993)
+# sort(unique(larv.93$cruise_id)) 
+sort(unique(ctd.93$cruise_id)) 
+# Larval events
+ev.1591 <- subset(larv.93, cruise_id == "DE9311") # 40.5500, -70.9500, length 3.9
+
+ev.2361 <- subset(larv.93, cruise_id == "DE9311")# 41.0667, -66.8167, length 5.5
+
+
+coords <- which(ALB9304$latitude == 41.6233 & ALB9304$longitude == -69.2467)
+ALB9304.c178 = ALB9304[coords,]
+
+temp = ggplot(ALB9304.c178, 
+              aes(x = (sea_water_temperature),
+  y = (pressure_dbars))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+       y = expression(~Pressure~(dbar)))
+sal =  ggplot(ALB9304.c178,
+              aes(x = (sea_water_salinity),
+  y = (pressure_dbars))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+        y = expression(~Pressure~(dbar)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+
+
+
+```
+
+
+### CTD Casts w/out larval events 1980s 
+
+
+#### CTD Cast 3 (35.4667, -75.25) 
+
+Exploring a location without a larval event (1980)
+
+Cruise id = EVR8001, Cast 3
+Bottom depth 29, gear type = bottle
+
+```{r}
+# sort(unique(ctd$year))
+# sort(unique(larva$year))
+ctd.80 <- subset(ctd, year == 1980)
+EVR8001 <- subset(ctd.80, cruise_id == 'EVR8001')
+larv.80 <-subset(larva, year == 1980)
+# sort(unique(larv.80$cruise_id)) 
+ev.471 <- subset(larv.80, cruise_id == "AL8010")
+# lat lon 37.1183 -74.8417
+cruise.id.21 <- sort(unique(ctd.21$cruise_id))
+
+coords <- which(EVR8001$latitude == 35.4667 & EVR8001$longitude == -75.25)
+EVR8001.c3 = EVR8001[coords,]
+
+temp = ggplot(EVR8001.c3, 
+              aes(x = (sea_water_temperature),
+                  y = (depth))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+      y = expression(Depth (m)))
+sal =  ggplot(EVR8001.c3,
+              aes(x = (sea_water_salinity),
+                  y = (depth))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(Depth (m)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+
+Cruise id = EVR8001, Cast 111
+Bottom depth 62, gear type = bottle
+
+```{r}
+# sort(unique(ctd.80$cruise_id)) # this ctd does not have a matching cruise_id 
+# to larval data, closest is AL8010, but the lat lon are different
+#AL8010 <- subset(ctd.80, cruise_id == 'ALB8010') # 35.6833, -74.95
+DEL8003<- subset(ctd.80, cruise_id == 'DEL8003') 
+ev.471 <- subset(larv.80, cruise_id == "AL8010") # 38.9833, -73.1333
+# lat lon 40.85,-68.7333
+coords <- which(DEL8003$latitude == 40.85 & DEL8003$longitude == -68.7333)
+DEL8003.c111 = DEL8003[coords,]
+
+temp = ggplot(DEL8003.c111, 
+              aes(x = (sea_water_temperature),
+                  y = (depth))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+      y = expression(Depth (m)))
+sal =  ggplot(DEL8003.c111,
+              aes(x = (sea_water_salinity),
+                  y = (depth))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(Depth (m)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+
+
+Cruise id = EVR8004, Cast 115 (42.3167,-67.7833)
+Bottom depth 220, gear type = bottle
+
+```{r}
+EVR8004 <- subset(ctd.80, cruise_id == 'EVR8004') 
+# lat lon 42.3167,-67.7833
+coords <- which(EVR8004$latitude == 42.3167 & EVR8004$longitude == -67.7833)
+EVR8004.c130 = EVR8004[coords,]
+
+temp = ggplot(EVR8004.c130, 
+              aes(x = (sea_water_temperature),
+                  y = (depth))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+      y = expression(Depth (m)))
+sal =  ggplot(EVR8004.c130,
+              aes(x = (sea_water_salinity),
+                  y = (depth))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(Depth (m)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+
+Cruise id = ALB8010, Cast 81 (40.1667, -70.7667)	
+
+Bottom depth 128, gear type = bottle
+
+```{r}
+ALB8010 <- subset(ctd.80, cruise_id == 'ALB8010') 
+
+# lat lon 40.1667, -70.7667
+coords <- which(ALB8010$latitude == 42.4667 & ALB8010$longitude == -66.3333)
+ALB8010.c81 = ALB8010[coords,]
+
+temp = ggplot(ALB8010.c81, 
+              aes(x = (sea_water_temperature),
+                  y = (depth))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+      y = expression(Depth (m)))
+sal =  ggplot(ALB8010.c81,
+              aes(x = (sea_water_salinity),
+                  y = (depth))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(Depth (m)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+Cruise id = ALB8012, Cast 81 (42.4667,-66.3333)	
+
+Bottom depth 128, gear type = bottle
+
+```{r}
+ALB8012 <- subset(ctd.80, cruise_id == 'ALB8012') 
+
+# lat lon (42.4667,-66.3333)
+coords <- which(ALB8012$latitude == 42.4667 & ALB8012$longitude == -66.3333)
+ALB8012.c135 = ALB8012[coords,]
+
+temp = ggplot(ALB8012.c135, 
+              aes(x = (sea_water_temperature),
+                  y = (depth))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+      y = expression(Depth (m)))
+sal =  ggplot(ALB8012.c135,
+              aes(x = (sea_water_salinity),
+                  y = (depth))) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(Depth (m)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+
+### Selecting CTD casts from larval events in 2009
+
+
+```{r}
+#sst <- brick(here::here('data/sst/ww_sst_2009.tif'))
+larvae.09 <- subset(larva, year == 2009)
+events.09 <- data.frame(event_number = larvae.09$event_number, 
+                        week = larvae.09$week)
+event.weeks <- sort(unique(larvae.09$week))
+
+```
+
+
+
+
+```{r}
+ids.09 = unique(larvae.09$cruise_id)
+ctd.ids.09 = unique(ctd.09$cruise_id)
+ctd.09 = read.csv(here::here('data/larval/ocdbs_v_erddap1_1015_850a_61b8_2009.csv'))
+names(ctd.09) <- tolower(names(ctd.09))
+ctd.09 = ctd.09 %>% filter(cruise_id %in% ids.09) %>%
+    mutate(date = lubridate::ymd_hms(utc_date),
+          depth = as.numeric(depth), 
+      pressure_dbars = as.numeric(pressure_dbars), 
+      sea_water_temperature = as.numeric(sea_water_temperature),
+      sea_water_salinity = as.numeric(sea_water_salinity)) %>% 
+  dplyr::select(date,cruise_id, cast_number,purpose_code,
+                latitude, longitude,
+                pressure_dbars, sea_water_temperature, sea_water_salinity) %>% 
+  na.omit()
+
+```
+
+Cruise HB2103 had 202 unique CTD casts. Larvae were found at 3 locations for
+this cruise. The following plots are the paired CTD casts (12,10,67) at the 
+locations where there were larval events. 
+
+#### Event 101: (39.9717,-72.5900), Week 33 2009
+Station 10, plankton stratum 15, bottom depth:57
+
++ Total_count = 1 
++ Count_at_length = 1 
++ Lengths = 5.2 (pelagic)
+
+```{r,events 1}
+
+# b = sst[[37]]
+# df <- raster::as.data.frame(b, xy=TRUE) %>% drop_na() 
+# ggplot() +
+#   geom_tile(data = df, aes(x=x, y=y, fill = ww_sst_2021_37)) + 
+#   scale_fill_gradientn(colours = jet.colors(25)) +
+#   geom_sf(data=US.areas %>% st_as_sf(),color = 'gray20', fill = 'lightgrey') +
+#    geom_contour(data = bathy,
+#                aes(x=x,y=y,z=-1*z),
+#                breaks=c(50,100,150,200, Inf),
+#                size=c(0.3),
+#                col = 'darkgrey') +
+#   geom_point(data = larvae.21 %>% filter(week == 37 & event_number == 37), 
+#              aes(x=longitude, y = latitude), size = 3) + 
+#   # coord_sf(xlim = c(-81,-66.0), ylim = c(26,43), datum = sf::st_crs(4326))  +
+#   coord_sf(xlim = c(-76,-66.0), ylim = c(35,43), datum = sf::st_crs(4326)) +
+#   xlab('Longitude') +
+#   ylab('Latitude') 
+
+
+DEL0909 <- subset(ctd.09, cruise_id == 'DEL0909')
+#`r length(unique(HB2103$cast_number))`
+coords <- which(DEL0909$latitude == 39.9717 & DEL0909$longitude == -72.5900)
+DEL0909.event101 = DEL0909[coords,]
+# event 37, total_count = 3, count_at_length = 1, lengths = 5.5, 5.8, 6.4
+
+# ** Note there are two event 37s, and the coordinates below do not match any
+# for the trip ID HB2103
+# coords <- which(HB2103$latitude == 40.5000 & HB2103$longitude == -70.8283)
+# HB2103.event37.2 = HB2103[coords,]
+
+## EVENT 37.1
+temp = ggplot(DEL0909.event101, 
+              aes(x = (sea_water_temperature),
+                  y = (pressure_dbars))) +  
+  geom_point(color = 'red') +
+  geom_path(col = 'red') +
+  scale_x_continuous(position = "top") +
+  scale_y_reverse() + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Temperature~(degree~C)),
+       y = expression(~Pressure~(dbar))) #title = 'HB2103.event37'
+sal =  ggplot(DEL0909.event101,
+              aes(x = sea_water_salinity,
+                  y = pressure_dbars)) +  
+  geom_point(color = 'blue') +
+  geom_path(col = 'blue') +
+  scale_x_continuous(position = "top")+
+  scale_y_reverse() + 
+  scale_y_reverse(breaks = seq(0.1,53.0,2))+
+  theme_bw() + 
+  theme(axis.text = element_text(size = 12, colour = 1),
+        axis.title = element_text(size = 14, colour = 1))+
+  labs(x = expression(~Practical~salinity),
+       y = expression(~Pressure~(dbar)))
+
+cowplot::plot_grid(temp,sal, nrow = 1)
+
+```
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,578 @@
+---
+title: "Environmental indicator analysis-Tilefish"
+output:  
+  html_document:
+    code_fold: hide
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r, wrangling}
+
+# Loading packages and data
+library(ggplot2)
+library(ecodata)
+library(lubridate)
+library(dplyr)
+library(stringr)
+library(marmap) # bathymetry
+library(RColorBrewer)
+library(ggnewscale)
+library(sf)
+library(cowplot)
+library(tidyverse)
+library(ggpubr)
+library(sf)
+library(ggdist)
+library(ggpubr)
+#library(glmTMB)
+
+# CPUE data (no env covariates)
+gt_data_model_cpue <- read.csv(here::here('data/catch_data/gt_data_model_cpue.csv'))
+names(gt_data_model_cpue) <- tolower(names(gt_data_model_cpue))
+# Add in column with cpue 
+# note: Paul indicated to use small mesh
+gt_data_model_cpue <- gt_data_model_cpue %>% 
+  mutate(mesh_bin = case_when(mesh_size <= 5.6 ~ 'SM',mesh_size >= 5.6 ~ 'LG',
+                                                      TRUE ~ 'NA')) %>%
+  mutate(cpue_hr = sum_gt_catch/effort_dur)
+
+# Catch data: 
+sfobs <-readRDS(here::here('data/catch_data/gold_tile_sf_ob_v1_temp_price.rds'))
+
+catch <- sfobs %>% 
+  group_by(YEAR, MONTH, area) %>%
+  select(YEAR, MONTH, area, SUM_GT_CATCH, TOT_GT_CATCH, depth, 
+         start_lat, start_lon, bottomT, bottomT_avg, 
+         MEAN_TEMP_C, MEAN_DPTH_M) %>% 
+    rename_all(., .funs = tolower)
+
+areas <- sort(unique(catch$area))
+catch.tally.ann <- catch %>% # aggregate by year
+  group_by(year) %>% 
+  summarise(ttl_sum = sum(sum_gt_catch))
+
+# Length data from observer program 
+lengths <- read.csv(here::here('data/catch_data/gt_data_length_andy.csv')) 
+names(lengths) <- tolower(names(lengths))
+
+# Recruitment estimates from 2021 report
+recruit <- read.csv(here::here('data/assessment_data/tilefish_rec_estimate_2021.csv'))
+
+# Larval data
+larva <- read.csv(here::here('data/larval/Malacanthidae_all_lengthdata_Oct2023.csv'))
+larva <- larva %>%
+  rename_all(., .funs = tolower) %>% 
+  mutate(date = lubridate::dmy_hms(event_date),
+         year = lubridate::year(date),
+         month = lubridate::month(date),
+         week = lubridate::week(date), 
+         day = lubridate::day(date)) %>% 
+  rename(cruise_id = cruise_name) 
+
+larva.w.zeros <- read.csv(here::here('data/larval/Malacanthidae_all_with0s_Oct2023.csv'))
+larva.w.zeros <- larva.w.zeros %>%
+  rename_all(., .funs = tolower) %>% 
+  mutate(date = lubridate::dmy_hms(event_date),
+         year = lubridate::year(date),
+         month = lubridate::month(date),
+         week = lubridate::week(date), 
+         day = lubridate::day(date)) %>% 
+  rename(cruise_id = cruise_name)
+
+# CTD data (this is only 2023 for testing out)
+ctd <- read.csv(here::here('data/larval/ctd_erddap_oct2023.csv'))
+ctd_meta <- ctd[1,]
+ctd <- ctd[-1,]
+names(ctd) <- tolower(names(ctd))
+ctd <- ctd %>%
+    mutate(date = lubridate::ymd_hms(utc_date),
+      year = lubridate::year(date),
+           month = lubridate::month(date),
+           week = lubridate::week(date), 
+           day = lubridate::day(date), 
+      depth = as.numeric(depth), 
+      pressure_dbars = as.numeric(pressure_dbars), 
+      sea_water_temperature = as.numeric(sea_water_temperature),
+      sea_water_salinity = as.numeric(sea_water_salinity))
+
+
+# Merge SF/Obs catch data with recruit estimates:
+catch_recruit <- cbind(recruit %>% filter(year %in% c(1998:2020)),
+                       catch.tally.ann %>%
+                         filter(year %in% c(1998:2020)) %>% select(ttl_sum))
+
+# loading in shape files for maps
+wd = here::here('shapefiles')
+US.areas <- st_read(here::here('shapefiles/USA.shp'))
+canada.areas <- st_read(here::here('shapefiles/Canada.shp'))
+bts_strata <- st_read(here::here('shapefiles/NES_BOTTOM_TRAWL_STRATA.shp'))
+gtf_strata <- bts_strata %>% 
+  filter(STRATUMA %in% c('01030', '01040', '01070', '01080', '01110', '01120', 
+                         '01140', '01150', '01670', '01680', '01710', '01720', 
+                         '01750', '01760'))
+
+bathy <- marmap::getNOAA.bathy(-81,-58, 27, 46)
+bathy = fortify.bathy(bathy)
+
+```
+
+
+### Tilefish data
+***
+
+#### Catch data
+
+Year-class strength is broadly defined as the number of fish spawned or hatched 
+in a given year (Ricker, 1975).
+
+
+Figure 1. Sum of catch (not accounting for effort), across years. Light blue 
+shaded region represents the temporal range of observer records and red 
+shaded region represents temporal range of study fleet records. The 'purple' 
+region is where they overlap. Note that 2000-2005 for observer records had 
+low sample size/number of vessels for tilefish, making the shaded region likely 
+the best region to use for analysis. The vertical dashed lines represent strong
+year classes for this species (Nesslage et al. 2021). Red asterisk marks year
+that stock was deemed 're-built'.
+
+```{r}
+# tot_catch == total (sum_catch) across hauls. so if tallying up annually, 
+# use sum_catch
+# Strong year-classes: 1970, 1973, 1993, 1999, 2005, 2013
+
+ggplot(catch.tally.ann, aes(x = factor(year), y = ttl_sum, group = 1))+
+   geom_rect(aes(xmin = '2007', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'red', alpha = 0.02) +
+  geom_rect(aes(xmin = '2000', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'lightblue', alpha = 0.05) +
+   geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
+  geom_line(color = 'black', size = 1.5) +
+  annotate("text", label = "*",
+    x = 26, y = 14000, size = 8, colour = "red" )+
+  xlab('Year') + 
+  ylab('Total sum tilefish catch') + 
+  # facet_wrap(~month)+
+  theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  ecodata::theme_facet()
+
+```
+
+
+#### CPUE 
+
+
+Figure 2. Catch-per-unit-effot for undirected trawl trips from the Study fleet and 
+observer program. Zeros have been added using species association methodology
+(via jaccard index). 
+
+[see here for example](https://static1.squarespace.com/static/511cdc7fe4b00307a2628ac6/t/64501a9ee391c8439cbc3c04/1682971295614/c_MRIP+Index_Drew+2022d.pdf)
+
+```{r}
+gt_data_model_cpue %>% 
+  filter(mesh_bin == 'SM') %>% # note: Paul indicated to use small mesh
+  group_by(year, source) %>% 
+  summarise(mean_cpue = mean(cpue_hr),.groups = 'drop') %>%
+  ggplot(aes(x=year,y=mean_cpue)) +
+  geom_line(lwd = 1) +
+  facet_wrap(~source) + 
+  theme_bw()
+
+gt_data_model_cpue %>% 
+  filter(mesh_bin == 'SM') %>%
+  group_by(year) %>% 
+  summarise(mean_cpue = mean(cpue_hr),.groups = 'drop') %>%
+  ggplot(aes(x=year,y=mean_cpue)) +
+  geom_line(lwd = 1) +
+  labs(title = 'Study fleet + Observer combined') + 
+  theme_bw()
+
+```
+
+
+#### Recruitment estimate
+
+Figure 3. Age-1 recruitment estimate from the 2021 tilefish assessment across 
+all years
+
+```{r}
+ggplot(recruit, aes(x = factor(year), y = recruit_est, group = 1))+
+   geom_rect(aes(xmin = '2007', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'red', alpha = 0.02) +
+  geom_rect(aes(xmin = '2000', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'lightblue', alpha = 0.05) +
+   geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
+  geom_line(color = 'black', size = 1.5) +
+  annotate("text", label = "*",
+    x = 26, y = 14000, size = 8, colour = "red" )+
+  xlab('Year') + 
+  ylab('Total sum tilefish catch') + 
+  # facet_wrap(~month)+
+  theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  ecodata::theme_facet()
+```
+
+
+Figure 4. Recruitment estimates in focus years 
+
++ Paul has suggested that data used to calculate recruitment 
+estimates was strongest from 2000 to present. 
++ Extended to 1998 to capture both the strong year class and El nino associated 
+with that year. 
+
+```{r}
+ggplot(recruit %>% filter(year %in% c(1998:2022)),
+       aes(x = factor(year), y = recruit_est, group = 1))+
+  geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
+  geom_line(color = 'black', size = 1.2) +
+  xlab('Year') + 
+  ylab('Recruit estimates') + 
+  theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  ecodata::theme_facet()
+```
+
+Figure 5. Recruitment estimates and Study Fleet and Observer catch data. Black
+line denotes recruitment estimate, yellow denotes sum of annual catch data
+across both Study fleet and Observer programs. 
+
+```{r}
+options(scipen=999)
+ggplot(catch_recruit) +
+  geom_line(aes(x = factor(year), y = recruit_est, group = 1),
+            col = 'black', size = 1.2) +
+  geom_line(aes(x = factor(year), y = ttl_sum*1000), size = 1.2, 
+            color = 'goldenrod1', group = 1) +
+  scale_y_continuous(sec.axis = sec_axis(~./1000, name = 'Catch (lbs)')) + 
+  geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
+  xlab('Year') + 
+  ylab('Recruit estimates') + 
+   theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  ecodata::theme_facet()
+```
+
+### Length data
+
+#### All lengths
+
+Figure 6. Distribution of lengths 
+Figure 7. Length frequencies
+Figure 8. Frequency of smaller individuals 
+
+
+```{r}
+# Define category breaks
+size_breaks <- c(0,10,20,30,40, 50, 60, 70, 80, 90, 100)
+# Making a function to bin the catches
+label_interval <- function(breaks) {
+  paste0("(", breaks[1:length(breaks) - 1], "-", breaks[2:length(breaks)], ")")
+}
+labels = label_interval(size_breaks)
+
+# length freq. table
+tab = table(cut(lengths$lenanml, 
+    breaks = size_breaks,
+    labels = label_interval(size_breaks)))
+
+## Plot full distribution
+ggplot(lengths,
+       aes(x = lenanml)) + 
+  geom_bar(position = position_dodge(), 
+           alpha = 0.4, fill= 'blue', color="black") + 
+  xlab('Tilefish length (cm)') +
+  theme_bw() +
+  theme_facet()
+
+# Plot length frequencies
+barplot(tab, xlab = 'Length bins (mm)', main = '')
+
+# Just the little ones
+barplot(tab[1:3], xlab = 'Length bins (mm)', main = '')
+```
+
+#### Juveniles (young of year) - year 1 and 2 size class
+
+
+```{r}
+ggplot(lengths %>% filter(lenanml <= 26),
+       aes(x = lenanml)) + 
+  geom_bar(position = position_dodge(), 
+           fill= 'slateblue', color="black") + 
+  xlab('Tilefish length (cm)') +
+  theme_bw() +
+  theme_facet()
+ggplot(lengths %>% filter(lenanml <= 26),
+       aes(x = lenanml, fill = numlen)) + 
+  geom_bar(position = position_dodge(), 
+           alpha = 0.4, fill= 'blue', color="black") + 
+  xlab('Tilefish length (cm)') +
+  theme_bw() +
+  facet_wrap(~year) + 
+  theme_facet()
+```
+
+
+### Environmental data
+***
+
+The strong year classes for Golden Tilefish were 1993, 1998, 2005, 2013. 
+Some of the underlying oceanographic processes that may be related to recruitment
+may influence habitat, retention/displacement and food availablity. These are
+explored below. 
+
+
+#### Habitat
+
+Tilefish occupy a very narrow band of habitat conditions. Therefore, temperature 
+and salinity may be of interest. 
+
+**SST**
+```{r}
+# SST
+
+```
+
+
+**SST Fronts**
+
+```{r}
+# SST fronts
+
+```
+
+
+**Bottom temperature**
+
+```{r}
+# Bottom temperature 
+
+```
+
+**Salinity** 
+
+Here we explore salinity from the GLORYS reanalysis model at three different 
+depths
+
+ + 55 meters (relevant to larvae, recruits)
+ + 110 meters (relevant recruits, juveniles)
+ + 220 meters (relevant to juveniles, adults)
+
+```{r}
+# Salinity 
+
+```
+
+#### Currents
+
+Cross-shelf processes may influence the retention or displacement of tilefish 
+during early life history stages. These are explored below.
+
+**Shelf water volume**
+
+Shelf water volume: A measure of the volume of water bounded inshore of the
+shelf-slope front. In this analysis, shelf water is defined as all water having 
+salinity <34 psu. The position of the shelf-slope front varies inter-annually
+with the higher shelf water values indicating the front being pushed further 
+towards the shelf break.
+
+high shv: front pushed towards sbf
+low shv: front pushed inshore (more slope water on shelf)
+
+Hypothesis: Higher recruitment success correlated with years of higher shelf 
+water volume in spring/summer. These months months may be particularly 
+important as that is when spawning is occurring and the position of the sbf
+may influence the position of larvae (away from spawning grounds).
+
+```{r}
+
+# Shelf water volume
+shlfvol <- read.csv(here::here('data/shelf_water_volume/ShelfWaterVolume_BSB_update.csv'))
+
+# wrangling date info, converting doy to date and month 
+yrs <- as.vector(nrow(shlfvol))
+shlfvol$Year <- as.character(shlfvol$Year)
+for (i in 1:nrow(shlfvol)){
+  yrs[i] <- strsplit(shlfvol$Year, ".", fixed = TRUE)[[i]][1]
+}
+shlfvol$year <- yrs
+shlfvol <- shlfvol %>% mutate(date_= as.Date(Year.Day-1, 
+                                             origin=paste0(year, "-01-01")), 
+              month= strftime(date_, "%m"), 
+              day=strftime(date_,"%d"), 
+              year = as.factor(year))  
+
+s
+
+```
+
+
+#### Food availablity 
+
+Larval tilefish eat zooplankton, likely calanus. *Calanus finmarchicus* are a
+copepod (crustacean) with a one-year life cycle and are an important food 
+source for many commercially important species. Calanus spp. are lipid rich, 
+herbivorous species that eat phytoplankton, diatoms in particular 
+(Hobbs et al. 2020).
+
+Diatoms are often represented as microplankton (>20 µm), but many species are of
+the nanoplankton size class (2-20 µm), and a smaller few may even overlap 
+with picoplanton size class (<2 µm).
+
+
+**Calanus**
+
+Calanus is not as common in MAB, need to figure out dominant zooplankton in 
+MAB. 
+
+```{r}
+# Calanus
+calanus <- ecodata::calanus_stage %>% filter(Time %in% c(1998:2021))%>% 
+    rename_all(., .funs = tolower) %>% 
+   mutate(year = time)
+
+
+ggplot() +
+  geom_line(data = calanus %>% filter(epu == 'GB', 
+                                  var == 'adt-Spring'), 
+       aes(x = year , y = value, col = epu), lwd = 1) + 
+  geom_line(data = calanus %>% filter(epu == 'MAB', 
+                                  var == 'adt-Spring'), 
+       aes(x = year , y = value, col = epu), lwd = 1) +
+  labs(color = c('EPU')) +
+  theme_minimal()
+
+```
+
+
+Georges Bank
+
+```{r}
+# GB
+c5.gb <- calanus %>% filter(epu == 'GB', var == 'c5-Spring')
+adult.gb <- calanus %>% filter(epu == 'GB', var == 'adt-Spring' )
+
+df.c5 <- dplyr::full_join(recruit, c5.gb, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, value) %>%
+  tidyr::drop_na()
+df.adt <- dplyr::full_join(recruit, adult.gb, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, value) %>%
+  tidyr::drop_na()
+
+# Regression
+ggscatter(df.c5, x = 'recruit_est', y = 'value', 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Recruitment estimate", 
+          ylab = "Calanus c5 spring (No. per 100m^-3)",
+           title = 'c5')  
+
+ggscatter(df.adt, x = 'recruit_est', y = 'value', 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Recruitment estimate", 
+          ylab = "Calanus adult spring (No. per 100m^-3)",
+           title = 'Adult')  
+# GLM 
+eqn <- as.formula(paste('recruit_est ~', paste(colnames(df.c5)[1], 
+                                               collapse = " + ")))
+
+mod0 <- glm(recruit_est ~ 1, 
+            data = df.c5, 
+            family = "poisson")
+
+mod1 <- glm(eqn, 
+            data = df.c5, 
+            family = "poisson")
+
+summary(mod0)
+summary(mod1)
+AIC(mod0, mod1) %>% dplyr::arrange(AIC)
+
+null_prediction <- exp(predict(mod0))
+mod_prediction <- exp(predict(mod1))
+
+
+plot(df.c5$year, df.c5$recruit_est, type = 'l')
+lines(df.c5$year, null_prediction, col = "gray")
+lines(df.c5$year, mod_prediction, col = "red")
+
+```
+
+
+
+Mid-atlantic 
+
+```{r}
+# Mid-Atlantic Bight
+c5.mab <- calanus %>% filter(epu == 'MAB', var == 'c5-Spring')
+adult.mab <- calanus %>% filter(epu == 'MAB', var == 'adt-Spring' )
+
+df.c5 <- dplyr::full_join(recruit, c5.mab, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, value) %>%
+  tidyr::drop_na()
+df.adt <- dplyr::full_join(recruit, adult.mab, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, value) %>%
+  tidyr::drop_na()
+
+# Regression
+ggscatter(df.c5, x = 'recruit_est', y = 'value', 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Recruitment estimate", 
+          ylab = "Calanus c5 spring (No. per 100m^-3)",
+           title = 'c5')  
+
+ggscatter(df.adt, x = 'recruit_est', y = 'value', 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Recruitment estimate", 
+          ylab = "Calanus adult spring (No. per 100m^-3)",
+           title = 'Adult')  
+
+
+
+```
+
+
+
+
+**Microplankton**
+
+```{r}
+# Microplankton
+```
+
+
+
+
+**Chlorophyll-A**
+```{r}
+
+# CHL-A
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
