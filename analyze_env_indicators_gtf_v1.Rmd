@@ -220,6 +220,7 @@ Figure 3. Age-1 recruitment estimate from the 2021 tilefish assessment across
 all years
 
 ```{r, c4}
+
 ggplot(recruit, aes(x = factor(year), y = recruit_est, group = 1))+
    geom_rect(aes(xmin = '2007', xmax = '2022', ymin = -Inf, ymax = Inf), 
             fill = 'red', alpha = 0.02) +
@@ -235,6 +236,9 @@ ggplot(recruit, aes(x = factor(year), y = recruit_est, group = 1))+
   theme(axis.text.x = element_text(color = 'black',
                                    size = 12, angle = 45, vjust = 1, hjust=1)) +
   ecodata::theme_facet()
+
+### Thought: Should we isolate years associated w/strong year classes (or bad)
+###           for correlations and analyses? 
 ```
 
 
@@ -353,14 +357,15 @@ explored below.
 Tilefish occupy a very narrow band of habitat conditions. Therefore, temperature 
 and salinity may be of interest. 
 
-**SST**
+##### SST
+
 ```{r, c9}
 # SST
 
 ```
 
 
-**SST Fronts**
+##### SST Fronts
 
 ```{r, c10}
 # SST fronts
@@ -368,10 +373,7 @@ and salinity may be of interest.
 ```
 
 
-**Bottom temperature**
-
-
-**Bottom temperature**
+##### Bottom Temperature
 
 Figure 1. GLORYS vs in-situ bottom temperatures from study fleet vessels. 
 
@@ -379,6 +381,7 @@ Figure 2. Bottom temperature (C) across years. Blue dots are in-situ data, red
 dots are from GLORYS. 
 
 ```{r, c11}
+
 ggplot2::ggplot(sfob.env, aes(x=bottomt, y=mean_temp_c)) +
   geom_point(color="blue", alpha=0.1)+
   geom_abline(intercept = 0, slope = 1) +
@@ -398,7 +401,7 @@ ggplot2::ggplot(sfob.env, aes(x=bottomt, y=year)) +
 ```
 
 
-#### Maps (Bottom T) {.tabset}
+##### Maps (Bottom T) {.tabset}
 
 
 ```{r, maps bt, results='asis'}
@@ -429,7 +432,7 @@ yrmap <- function(yrs){
 
 
 for(i in 1:length(yrs)){
- cat("\n#####",  as.character(yrs[i]),"\n")
+ cat("\n######",  as.character(yrs[i]),"\n")
     print(yrmap(yrs[i])) 
     cat("\n")   
 }
@@ -582,7 +585,7 @@ depths
 Cross-shelf processes may influence the retention or displacement of tilefish 
 during early life history stages. These are explored below.
 
-**Shelf water volume**
+##### Shelf water volume
 
 Shelf water volume: A measure of the volume of water bounded inshore of the
 shelf-slope front. In this analysis, shelf water is defined as all water having 
@@ -641,8 +644,7 @@ df.lag = shlfvol %>%
 df.join = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
   dplyr::select(year, month, recruit_est, mean_t, mean_s, mean_v, 
                 mean_t_lag2, mean_s_lag2, mean_v_lag2,
-                mean_t_lag3, mean_s_lag3, mean_v_lag3,
-                mean_t_lag6, mean_s_lag6, mean_v_lag6) %>%
+                mean_t_lag3, mean_s_lag3, mean_v_lag3) %>%
   tidyr::drop_na()
 # See what months have data
 sort(unique(df.join$month))
@@ -692,7 +694,51 @@ ggplot2::ggplot(df.join,
 
 With lags
 
+**2 Months**
+
+```{r}
+## Shelf water volume 2 month lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_v_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water temperature  2 month lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_t_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## Shelf water salinity 2 month lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_s_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+```
+
 **3 Months**
+
 
 ```{r}
 ## Shelf water volume 3 month lag
@@ -737,48 +783,7 @@ ggplot2::ggplot(df.join,
 ```
 
 
-**2 Months**
 
-```{r}
-## Shelf water volume 2 month lag
-ggplot2::ggplot(df.join,
-                aes(x=recruit_est, y=mean_v_lag2)) + 
-  geom_point(color = 'black') +
-  stat_smooth(method = "lm",
-              formula = y ~ x,
-              geom = "smooth") +
-  xlab('Recruitment estimate') +
-  ylab('Mean shelf water volume') +
-  labs(title = 'Shelf water volume - lag 2 months') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw()
-
-## Shelf water temperature  2 month lag
-ggplot2::ggplot(df.join,
-                aes(x=recruit_est, y=mean_t_lag2)) + 
-  geom_point(color = 'black') +
-  stat_smooth(method = "lm",
-              formula = y ~ x,
-              geom = "smooth") +
-  xlab('Recruitment estimate') +
-  ylab('Mean shelf water temperature') +
-  labs(title = 'Shelf water temperature - lag 2 months') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw()
-## Shelf water salinity 2 month lag
-ggplot2::ggplot(df.join,
-                aes(x=recruit_est, y=mean_s_lag2)) + 
-  geom_point(color = 'black') +
-  stat_smooth(method = "lm",
-              formula = y ~ x,
-              geom = "smooth") +
-  xlab('Recruitment estimate') +
-  ylab('Mean shelf water salinity') +
-  labs(title = 'Shelf water salinity - lag 2 months') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw()
-
-```
 Annual 
 
 
@@ -939,7 +944,7 @@ the nanoplankton size class (2-20 µm), and a smaller few may even overlap
 with picoplanton size class (<2 µm).
 
 
-**Calanus**
+##### Calanus
 
 Calanus is not as common in MAB, need to figure out dominant zooplankton in 
 MAB. 
@@ -1065,7 +1070,7 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 
 
 
-**Chlorophyll-A**
+##### Chlorophyll-A
 ```{r, c20}
 
 # CHL-A
