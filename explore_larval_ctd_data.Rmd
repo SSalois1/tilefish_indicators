@@ -35,9 +35,9 @@ library(raster)
 # Larval data
 
 larva <- read.csv(here::here('data/larval/Malacanthidae_all_lengthdata_Oct2023.csv'))
-names(larva) <- tolower(names(larva))
 larva <- larva %>%
-    mutate(date = lubridate::dmy_hms(event_date),
+     rename_all(., .funs = tolower) %>% 
+mutate(date = lubridate::dmy_hms(event_date),
       year = lubridate::year(date),
            month = lubridate::month(date),
            week = lubridate::week(date), 
@@ -45,9 +45,9 @@ larva <- larva %>%
   rename(cruise_id = cruise_name)
 
 larva.w.zeros <- read.csv(here::here('data/larval/Malacanthidae_all_with0s_Oct2023.csv'))
-names(larva.w.zeros) <- tolower(names(larva.w.zeros))
 larva.w.zeros <- larva.w.zeros %>%
-    mutate(date = lubridate::dmy_hms(event_date),
+     rename_all(., .funs = tolower) %>% 
+ mutate(date = lubridate::dmy_hms(event_date),
       year = lubridate::year(date),
            month = lubridate::month(date),
            week = lubridate::week(date), 
