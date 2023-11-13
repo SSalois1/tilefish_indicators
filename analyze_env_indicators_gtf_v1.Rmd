@@ -4,7 +4,7 @@ output:
   html_document:
     code_fold: hide
     toc: true
-    toc_depth: 4
+    toc_depth: 5
     toc_float: true
     number_sections: false
 ---
@@ -93,7 +93,8 @@ gtf_strata <- bts_strata %>%
 
 bathy <- marmap::getNOAA.bathy(-81,-58, 27, 46)
 bathy = fortify.bathy(bathy)
-
+# plot(gtf_strata)
+plot(bts_strata)
 ```
 
 
@@ -365,14 +366,6 @@ and salinity may be of interest.
 ```
 
 
-##### SST Fronts
-
-```{r, c10}
-# SST fronts
-
-```
-
-
 ##### Bottom Temperature
 
 Figure 1. GLORYS vs in-situ bottom temperatures from study fleet vessels. 
@@ -441,6 +434,7 @@ for(i in 1:length(yrs)){
 ```
 
 
+##### Bottom T analysis
 
 Note here temperatures are averaged across all depths > 50 for each month.
 
@@ -566,7 +560,7 @@ ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
 ```
 
 
-**Salinity** 
+##### Salinity
 
 Here we explore salinity from the GLORYS reanalysis model at three different 
 depths
@@ -1061,7 +1055,7 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 
 
 
-**Microplankton**
+##### Microplankton
 
 ```{r, c19}
 # Microplankton
@@ -1079,6 +1073,13 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 
 
 
+
+##### SST Fronts
+
+```{r, c10}
+# SST fronts
+
+```
 
 
 
