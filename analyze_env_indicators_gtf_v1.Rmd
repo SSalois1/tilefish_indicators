@@ -62,6 +62,8 @@ sfob.env <- sfobs %>%
   mutate(YEAR = as.integer(YEAR)) %>% 
   rename_all(., .funs = tolower)
 
+write.csv(sfob.env, "C:/Users/stephanie.owen/Documents/tilefish_indicators/data/catch_data/sfob_env.csv", row.names=FALSE)
+
 
 areas <- sort(unique(sfob.env$area))
 catch.tally.ann <- sfob.env %>% # aggregate by year
@@ -606,16 +608,115 @@ sort(unique(sfob.env$depth))
 
 # another note - since I group by year AND month - the lags are month specific. 
 # If you wanted to lag by year only, you would have to get rid of month below.
-df.lag = sfob.env %>% filter(year > 2006 & depth > 50) %>%
+
+#filter by year, depth, cpue 
+df.lag.cpue = sfob.env %>% filter(year > 2006 & depth > 50 & cpue_hr > 0) %>%
   group_by(year,month) %>% 
   summarise(mean_dpth = mean(depth),
-            mean_bt = mean(bottomt)) %>% 
+            mean_bt = mean(bottomt),
+            mean_cpue = mean(cpue_hr)) %>% 
   mutate(mean_bt_lag2 = lag(mean_bt,2),
          mean_bt_lag3 = lag(mean_bt,3), 
          mean_bt_lag6 = lag(mean_bt, 6))
 
+#omit NA bottomt
+df.lag.sfob <- df.lag.cpue[!(is.na(df.lag.cpue$mean_bt)), ]
 
+# See what months have data
+sort(unique(df.lag.sfob$month))
+hist(df.lag.sfob$month)  #winter/spring and summer/fall
 
+## Winter/spring bottom temp no lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(1,2,3,4,5,6)),
+                aes(x=mean_cpue, y=mean_bt)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)') +
+  labs(title = 'Winter/spring no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer/fall bottom temp no lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9,10,11,12)),
+                aes(x=mean_cpue, y=mean_bt)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer/fall no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Winter/spring bottom temp 2 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(1,2,3,4,5,6)),
+                aes(x = mean_cpue, y = mean_bt_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Winter/spring lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer/fall bottom temp 2 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9,10,11,12)),
+                aes(x = mean_cpue, y = mean_bt_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer/fall lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Winter/spring bottom temp 3 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(1,2,3,4,5,6)),
+                aes(x = mean_cpue, y = mean_bt_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Winter/spring lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer/fall bottom temp 3 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9,10,11,12)),
+                aes(x = mean_cpue, y = mean_bt_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer/fall lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer/fall bottom temp 6 month lag
+# No 6 month lag data for winter/spring
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9,10,11,12)),
+                aes(x = mean_cpue, y = mean_bt_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer/fall lag 6 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
 ```
 
 
