@@ -717,8 +717,21 @@ ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9,10,11,12)),
   labs(title = 'Summer/fall lag 6 months') +
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
+
+
 ```
 
+**Corrleations and figures for sf/ob data and in-situ bottom temps**
+
+```{r}
+library("ggpubr")
+ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Mean CPUE/hr", ylab = "Mean bottom temp (°C)")
+
+cor.test(df.lag.sfob$mean_cpue, df.lag.sfob$mean_bt, method=c("pearson"))
+```
 
 
 ##### Salinity
