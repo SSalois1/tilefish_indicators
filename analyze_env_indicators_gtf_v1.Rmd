@@ -1092,17 +1092,26 @@ gsi.m <- read.csv(here::here('data/gulf_stream_index/mm_gsi_1954_2022_chen.csv')
 #                      values_from = c(GSI)) %>% 
 #   rlang::set_names(c('year','recruit_est','Mar', 'Apr', 'May',                                                                   'Jun', 'Jul', 'Aug', 'Sep')) %>% 
 #   tidyr::drop_na()
+
+
+## --- This joins recruit estimate data to GSI data and 
+## --- calculates some summary stats(mean, sd, min, max)
 df <- dplyr::full_join(recruit, gsi.m %>%
                    group_by(year) %>% 
                    filter(month %in% c(3:8)) %>% 
-                   summarise(m.gsi = mean(GSI), 
+                   summarise(m.gsi = mean(GSI),
+                             sd.gsi = sd(GSI),
                              max.gsi = max(GSI), 
                              min.gsi = min(GSI)), 
                  by = join_by(year)) %>% 
   mutate(pos = ifelse(m.gsi > 0, 'Northerly', 'Southerly'), 
          n.pos = ifelse(m.gsi > 0, 1, 0))
-df <- df[-c(51:69),]
+df <- df[-c(51:69),] # this removes rows w/years that don't match 
+# (could/should do this before hand in more standardized way - will do later)
 
+# Plot the time series (mean GSI for the months of interest)
+# -- Note: here I am looking just at March through August assuming these
+# months are the most important to recently spawned individuals 
 ggplot(data = df, 
        aes(x = year, y = m.gsi)) +
   geom_line(lwd = 1) +
@@ -1125,6 +1134,8 @@ theme_bw()
 #   geom_hline(yintercept = 0, lty = 2) +
 #   theme_bw()
 
+
+# Looking across all months 
 dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
   dplyr::select(year, month, recruit_est, GSI) %>%
   #filter(month %in% c(3:9)) %>%  
@@ -1139,6 +1150,7 @@ ggplot2::ggplot(.,aes(x=recruit_est, y=GSI)) +
   geom_hline(yintercept = 0, lty = 2) +
   theme_bw()
 
+# Looking across April through July
 dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
   dplyr::select(year, month, recruit_est, GSI) %>%
   #filter(month %in% c(3:9)) %>%  
@@ -1161,6 +1173,8 @@ Should I add a lag? If so, how much?
 
 
 ```{r}
+
+# recruitment index across all years 
 dplyr::full_join(recruit, gsi.m %>%
                      group_by(year) %>% 
                      filter(month %in% c(3:8)) %>% 
@@ -1190,6 +1204,7 @@ dplyr::full_join(recruit, gsi.m %>%
   theme_bw()
 
 
+# recruitment index across just the years that Paul recommended + el nino 1998  
 
 tt = dplyr::full_join(recruit, gsi.m %>%
                      group_by(year) %>% 
