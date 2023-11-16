@@ -792,7 +792,26 @@ ggplot2::ggplot(df.join,
   theme_bw()
 
 
-
+ggplot2::ggplot(df.join %>% filter(year >1997 & month %in% c(7,8,9)),
+                aes(x=recruit_est, y=mean_s)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  labs(title = 'Recruitment est x M.S.W July,Aug,Sept (1998:2020)') +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
 
 ```
 
@@ -1035,6 +1054,240 @@ ggplot2::ggplot(df.join,
 ```
 
 
+##### Gulf-stream index
+
+Gulf stream index was calculated based on method presented by 
+Pérez-Hernández and Joyce (2014). The gulf stream index (GSI) is a measure of 
+the degrees latitude above the average Gulf Stream position based on ocean
+temperature at 200m (15 C) depth between 55W to 75W.
+
+Positive values indicate a the mean position of the GS is more Northernly, 
+whereas negative values indicate a more Southernly position. 
+
+```{r}
+# positive are more Northerly, negative are more southernly 
+
+## --- Note below is the original data source, which was modified to include 
+## --- month and then saved as a new file (mm_gsi_1954_2022_chen.csv).
+# gsi.a <- ecodata::gsi
+# gsi.m <- read.csv(here::here('data/gulf_stream_index/Chen_EN4_T200_GSI_1954_2022_monthly - Zhuomin Chen.xlsx - Sheet1.csv'))
+
+# # weird inefficient solution I came up with to get month values (but it works)
+# gsi.m$year <- as.numeric(gsub("(^\\d{4}).*", "\\1", gsi.m$Month))
+# gsi.m$m.1 <- round(str_extract(gsi.m$Month, '\\d+([.,]\\d+)?') %>% as.numeric()- gsi.m$year,2)
+# gsi.m$month <- round(as.numeric(str_extract(gsi.m$m.1, '\\d\\d')))
+# is.na(gsi.m$month) <- 10
+# gsi.m$month <- replace(gsi.m$month, is.na(gsi.m$month), 10)
+# gsi.m <- gsi.m[,-4]
+# # saving so don't have to do that everytime:
+# write.csv(gsi.m, 'mm_gsi_1954_2022_chen.csv') #
+
+
+gsi.m <- read.csv(here::here('data/gulf_stream_index/mm_gsi_1954_2022_chen.csv'))
+
+# df <- dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+#   dplyr::select(year, month, recruit_est, GSI) %>%
+#   filter(month %in% c(3:9)) %>% 
+#   tidyr::pivot_wider(names_from = c(month),
+#                      values_from = c(GSI)) %>% 
+#   rlang::set_names(c('year','recruit_est','Mar', 'Apr', 'May',                                                                   'Jun', 'Jul', 'Aug', 'Sep')) %>% 
+#   tidyr::drop_na()
+df <- dplyr::full_join(recruit, gsi.m %>%
+                   group_by(year) %>% 
+                   filter(month %in% c(3:8)) %>% 
+                   summarise(m.gsi = mean(GSI), 
+                             max.gsi = max(GSI), 
+                             min.gsi = min(GSI)), 
+                 by = join_by(year)) %>% 
+  mutate(pos = ifelse(m.gsi > 0, 'Northerly', 'Southerly'), 
+         n.pos = ifelse(m.gsi > 0, 1, 0))
+df <- df[-c(51:69),]
+
+ggplot(data = df, 
+       aes(x = year, y = m.gsi)) +
+  geom_line(lwd = 1) +
+  geom_hline(yintercept = 0, lty = 2) +
+  labs(title = 'Mean GS position anomaly March:August',
+       x = 'Year', 
+       y = "Gulf stream position anomaly\n") +
+theme_bw() 
+
+# dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+#   dplyr::select(year, month, recruit_est, GSI) %>%
+#   #filter(month %in% c(3:9)) %>%  
+#   filter(year>1997) %>% 
+#   tidyr::drop_na() %>% 
+#   ggplot2::ggplot(.,aes(x=recruit_est, y=GSI)) + 
+#   geom_point(color = 'black') +
+#   xlab('Recruitment estimate') +
+#   ylab('Gulf stream position anomaly') +
+#   labs(title = 'Gulf stream index') +
+#   geom_hline(yintercept = 0, lty = 2) +
+#   theme_bw()
+
+dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, GSI) %>%
+  #filter(month %in% c(3:9)) %>%  
+  filter(year>1997) %>% 
+  tidyr::drop_na() %>% 
+ggplot2::ggplot(.,aes(x=recruit_est, y=GSI)) + 
+  geom_point(color = 'black') +
+  facet_wrap(~month)+
+  xlab('Recruitment estimate') +
+  ylab('Gulf stream position anomaly') +
+  labs(title = 'Gulf stream index by month') +
+  geom_hline(yintercept = 0, lty = 2) +
+  theme_bw()
+
+dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, GSI) %>%
+  #filter(month %in% c(3:9)) %>%  
+  filter(year>1997 & month %in% c(4:7)) %>% 
+  tidyr::drop_na() %>% 
+  ggplot2::ggplot(.,aes(x=recruit_est, y=GSI)) + 
+  geom_point(color = 'black') +
+  xlab('Recruitment estimate') +
+  ylab('Gulf stream position anomaly') +
+  labs(title = 'Gulf stream index (Apr:Jul)') +
+  geom_hline(yintercept = 0, lty = 2) +
+  theme_bw()
+
+
+  
+```
+
+
+Should I add a lag? If so, how much? 
+
+
+```{r}
+dplyr::full_join(recruit, gsi.m %>%
+                     group_by(year) %>% 
+                     filter(month %in% c(3:8)) %>% 
+                     summarise(m.gsi = mean(GSI)), 
+                   by = join_by(year)) %>%
+  ggplot2::ggplot(., aes(x=recruit_est, y=m.gsi)) + 
+  geom_point(color = 'black') +
+  geom_hline(yintercept = 0, lty = 2)+
+  labs(title = 'All years') +
+  xlab('Recruitment estimate') +
+  ylab('Gulf stream position anomaly') +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+
+
+
+tt = dplyr::full_join(recruit, gsi.m %>%
+                     group_by(year) %>% 
+                     filter(month %in% c(3:8)) %>% 
+                     summarise(m.gsi = mean(GSI)), 
+                   by = join_by(year)) 
+  ggplot2::ggplot(tt %>% filter(year>1997), aes(x=recruit_est, y=m.gsi)) + 
+  geom_point(color = 'black') +
+  geom_hline(yintercept = 0, lty = 2)+
+  labs(title = '1998:2020, No outliers') +
+  xlab('Recruitment estimate') +
+  ylab('Gulf stream position anomaly') +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+
+
+
+
+
+
+```
+
+
+```{r}
+
+
+
+ggplot(data = df, # add the data
+       aes(x = year, y = m.gsi, # set x, y coordinates
+           color = pos)) +    # color by GS position
+  geom_boxplot() +
+  facet_grid(~pos) + # create panes base on GS position
+  ecodata::theme_facet()
+
+
+
+# this gives main effects AND interactions
+pos_aov <- aov(recruit_est ~ year * pos,
+              data = df)
+
+# look at effects and interactions
+# summary(pos_aov)
+tidy_pos_aov <- broom::tidy(pos_aov)
+tidy_pos_aov
+# write.csv(tidy_pos_aov, 'gs_pos_aov.csv')
+
+
+
+ggplot(data = df, 
+             aes(x = recruit_est/1000, y = m.gsi, fill = pos,  
+                 group = year)) +
+   geom_bar(color = "black", stat = "identity", 
+            position = position_dodge2(preserve = "single"), width = 20) +
+  theme_bw() +
+  labs(title = 'All years',
+       x = "\nRecruitment estimate (x1000)", 
+       y = "Gulf stream position anomaly\n")
+
+ggplot(data = df %>% filter(year <= 1999), 
+       aes(x = recruit_est/1000, y = m.gsi, fill = pos,  
+           group = year)) +
+  geom_bar(color = "black", stat = "identity", 
+           position = position_dodge2(preserve = "single"), width = 40) +
+  theme_bw() +
+  labs(title = '1971:1999',
+       x = "\nRecruitment estimate (x1000)", 
+       y = "Gulf stream position anomaly\n")
+
+ggplot(data = df %>% filter(year >1999), 
+       aes(x = recruit_est/1000, y = m.gsi, fill = pos,  
+           group = year)) +
+  geom_bar(color = "black", stat = "identity", 
+           position = position_dodge2(preserve = "single"), width = 40) +
+  theme_bw() +
+  labs(title = '2000:2020',
+       x = "\nRecruitment estimate (x1000)", 
+       y = "Gulf stream position anomaly\n")
+
+
+
+```
+
+
+
 #### Food availablity 
 
 Larval tilefish eat zooplankton, likely calanus. *Calanus finmarchicus* are a
@@ -1237,10 +1490,21 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 
 References: 
 
+Joyce, Terrence M, Young-Oh Kwon, Hyodae Seo, and Caroline C Ummenhofer. 2019.
+“Meridional Gulf Stream Shifts Can Influence Wintertime Variability in the North 
+Atlantic Storm Track and Greenland Blocking.” 
+Geophysical Research Letters 46 (3): 1702–8. https://doi.org/10.1029/2018GL081087.
 
 Hobbs, L., Banas, N. S., Cottier, F. R., Berge, J., & Daase, M. (2020). Eat or 
 sleep: availability of winter prey explains mid-winter and spring activity in
 an Arctic Calanus population. Frontiers in Marine Science, 7, 541564.
+
+
+
+Pérez-Hernández, M. Dolores, and Terrence M. Joyce. 2014. 
+“Two Modes of Gulf Stream Variability Revealed in the Last 
+Two Decades of Satellite Altimeter Data.” 
+Journal of Physical Oceanography 44 (1): 149–63. https://doi.org/10.1175/JPO-D-13-0136.1.
 
 
 
