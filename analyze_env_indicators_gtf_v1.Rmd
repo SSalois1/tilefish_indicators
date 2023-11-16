@@ -721,16 +721,34 @@ ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9,10,11,12)),
 
 ```
 
-**Corrleations and figures for sf/ob data and in-situ bottom temps**
+**Corrleation and figures for sf/ob data and in-situ bottom temps**
 
 ```{r}
 library("ggpubr")
-ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson",
-          xlab = "Mean CPUE/hr", ylab = "Mean bottom temp (°C)")
+lm_bt<-lm(mean_bt ~ mean_cpue, data=df.lag.sfob)
+summary(lm_bt)
+#plot(mean_bt ~ mean_cpue, data=df.lag.sfob, pch=1, col="dodgerblue") + abline(lm_bt)
 
 cor.test(df.lag.sfob$mean_cpue, df.lag.sfob$mean_bt, method=c("pearson"))
+
+ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=7.5),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean bottom temp (°C)")
+
+#ggqqplot(df.lag.sfob$mean_bt, ylab="Mean BT")
+#ggqqplot(df.lag.sfob$mean_cpue, ylab="Mean CPUE")
+
+#cor.test(df.lag.sfob$mean_cpue, df.lag.sfob$mean_bt, method=c("spearman"))
+
+#ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt", 
+         # add = "reg.line", conf.int = TRUE, 
+         # cor.coef = TRUE, cor.method = "spearman",
+         # xlab = "Mean CPUE/hr", ylab = "Mean bottom temp (°C)")
+
+
 ```
 
 
