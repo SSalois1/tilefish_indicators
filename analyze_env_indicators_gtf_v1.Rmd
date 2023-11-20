@@ -13,7 +13,6 @@ output:
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
-
 ```{r, wrangling}
 
 # Loading packages and data
@@ -97,25 +96,15 @@ bathy = fortify.bathy(bathy)
 plot(bts_strata)
 ```
 
-
-
 ## Tilefish data
-***
+
+------------------------------------------------------------------------
 
 ### Catch data
 
-Year-class strength is broadly defined as the number of fish spawned or hatched 
-in a given year (Ricker, 1975).
+Year-class strength is broadly defined as the number of fish spawned or hatched in a given year (Ricker, 1975).
 
-
-Figure 1. Sum of catch (not accounting for effort), across years. Light blue 
-shaded region represents the temporal range of observer records and red 
-shaded region represents temporal range of study fleet records. The 'purple' 
-region is where they overlap. Note that 2000-2005 for observer records had 
-low sample size/number of vessels for tilefish, making the shaded region likely 
-the best region to use for analysis. The vertical dashed lines represent strong
-year classes for this species (Nesslage et al. 2021). Red asterisk marks year
-that stock was deemed 're-built'.
+Figure 1. Sum of catch (not accounting for effort), across years. Light blue shaded region represents the temporal range of observer records and red shaded region represents temporal range of study fleet records. The 'purple' region is where they overlap. Note that 2000-2005 for observer records had low sample size/number of vessels for tilefish, making the shaded region likely the best region to use for analysis. The vertical dashed lines represent strong year classes for this species (Nesslage et al. 2021). Red asterisk marks year that stock was deemed 're-built'.
 
 ```{r, c1}
 # tot_catch == total (sum_catch) across hauls. so if tallying up annually, 
@@ -140,13 +129,9 @@ ggplot(catch.tally.ann, aes(x = factor(year), y = ttl_sum, group = 1))+
 
 ```
 
+#### CPUE
 
-#### CPUE 
-
-
-Figure 2. Catch-per-unit-effot for undirected trawl trips from the Study fleet and 
-observer program. Zeros have been added using species association methodology
-(via jaccard index). 
+Figure 2. Catch-per-unit-effot for undirected trawl trips from the Study fleet and observer program. Zeros have been added using species association methodology (via jaccard index).
 
 [see here for example](https://static1.squarespace.com/static/511cdc7fe4b00307a2628ac6/t/64501a9ee391c8439cbc3c04/1682971295614/c_MRIP+Index_Drew+2022d.pdf)
 
@@ -170,7 +155,6 @@ gt_data_model_cpue %>%
   theme_bw()
 
 ```
-
 
 ### Maps (catch) {.tabset}
 
@@ -213,12 +197,9 @@ for(i in 1:length(yrs)){
 
 ```
 
-
-
 ### Recruitment estimate
 
-Figure 3. Age-1 recruitment estimate from the 2021 tilefish assessment across 
-all years
+Figure 3. Age-1 recruitment estimate from the 2021 tilefish assessment across all years
 
 ```{r, c4}
 
@@ -232,7 +213,7 @@ ggplot(recruit, aes(x = factor(year), y = recruit_est, group = 1))+
   annotate("text", label = "*",
     x = 26, y = 14000, size = 8, colour = "red" )+
   xlab('Year') + 
-  ylab('Total sum tilefish catch') + 
+  ylab('Recruit estimates') + 
   # facet_wrap(~month)+
   theme(axis.text.x = element_text(color = 'black',
                                    size = 12, angle = 45, vjust = 1, hjust=1)) +
@@ -240,15 +221,14 @@ ggplot(recruit, aes(x = factor(year), y = recruit_est, group = 1))+
 
 ### Thought: Should we isolate years associated w/strong year classes (or bad)
 ###           for correlations and analyses? 
+
+# Not a bad idea: It's a hard thing to justify for a peer reviewed process, but as part of an exploratory analysis, I see no problems with trying it out. I do know there are lots of studies out there working on better ways to analyze causal mechanisms of these periodic recruitment ts. But if we only have 4-5 strong year classes, that's not a lot of data to work with.
 ```
 
+Figure 4. Recruitment estimates in focus years
 
-Figure 4. Recruitment estimates in focus years 
-
-+ Paul has suggested that data used to calculate recruitment 
-estimates was strongest from 2000 to present. 
-+ Extended to 1998 to capture both the strong year class and El nino associated 
-with that year. 
+-   Paul has suggested that data used to calculate recruitment estimates was strongest from 2000 to present.
+-   Extended to 1998 to capture both the strong year class and El nino associated with that year.
 
 ```{r, c5}
 ggplot(recruit %>% filter(year %in% c(1998:2022)),
@@ -260,11 +240,11 @@ ggplot(recruit %>% filter(year %in% c(1998:2022)),
   theme(axis.text.x = element_text(color = 'black',
                                    size = 12, angle = 45, vjust = 1, hjust=1)) +
   ecodata::theme_facet()
+
+# Question: How come the strong year class lines don't seem to match all the peaks in the data?
 ```
 
-Figure 5. Recruitment estimates and Study Fleet and Observer catch data. Black
-line denotes recruitment estimate, yellow denotes sum of annual catch data
-across both Study fleet and Observer programs. 
+Figure 5. Recruitment estimates and Study Fleet and Observer catch data. Black line denotes recruitment estimate, yellow denotes sum of annual catch data across both Study fleet and Observer programs.
 
 ```{r, c6}
 options(scipen=999)
@@ -286,10 +266,7 @@ ggplot(catch_recruit) +
 
 #### All lengths
 
-Figure 6. Distribution of lengths 
-Figure 7. Length frequencies
-Figure 8. Frequency of smaller individuals 
-
+Figure 6. Distribution of lengths Figure 7. Length frequencies Figure 8. Frequency of smaller individuals
 
 ```{r, c7}
 # Define category breaks
@@ -321,7 +298,7 @@ barplot(tab, xlab = 'Length bins (mm)', main = '')
 barplot(tab[1:3], xlab = 'Length bins (mm)', main = '')
 ```
 
-#### Juveniles 
+#### Juveniles
 
 Young of year - year 1 and 2 size class
 
@@ -343,20 +320,15 @@ ggplot(lengths %>% filter(lenanml <= 26),
   theme_facet()
 ```
 
-
 ### Environmental data
-***
 
-The strong year classes for Golden Tilefish were 1993, 1998, 2005, 2013. 
-Some of the underlying oceanographic processes that may be related to recruitment
-may influence habitat, retention/displacement and food availablity. These are
-explored below. 
+------------------------------------------------------------------------
 
+The strong year classes for Golden Tilefish were 1993, 1998, 2005, 2013. Some of the underlying oceanographic processes that may be related to recruitment may influence habitat, retention/displacement and food availablity. These are explored below.
 
 #### Habitat
 
-Tilefish occupy a very narrow band of habitat conditions. Therefore, temperature 
-and salinity may be of interest. 
+Tilefish occupy a very narrow band of habitat conditions. Therefore, temperature and salinity may be of interest.
 
 ##### SST
 
@@ -365,13 +337,11 @@ and salinity may be of interest.
 
 ```
 
-
 ##### Bottom Temperature
 
-Figure 1. GLORYS vs in-situ bottom temperatures from study fleet vessels. 
+Figure 1. GLORYS vs in-situ bottom temperatures from study fleet vessels.
 
-Figure 2. Bottom temperature (C) across years. Blue dots are in-situ data, red
-dots are from GLORYS. 
+Figure 2. Bottom temperature (C) across years. Blue dots are in-situ data, red dots are from GLORYS.
 
 ```{r, c11}
 
@@ -393,9 +363,7 @@ ggplot2::ggplot(sfob.env, aes(x=bottomt, y=year)) +
 
 ```
 
-
 ##### Maps (Bottom T) {.tabset}
-
 
 ```{r, maps bt, results='asis'}
 
@@ -433,10 +401,11 @@ for(i in 1:length(yrs)){
 
 ```
 
-
 ##### Bottom T analysis
 
-Note here temperatures are averaged across all depths > 50 for each month.
+Note here temperatures are averaged across all depths \> 50 for each month.
+
+Adelle comment: As we discussed, this might be a problem or we can do it by strata
 
 ```{r, c13}
 
@@ -559,15 +528,13 @@ ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
 
 ```
 
-
 ##### Salinity
 
-Here we explore salinity from the GLORYS reanalysis model at three different 
-depths
+Here we explore salinity from the GLORYS reanalysis model at three different depths
 
- + 55 meters (relevant to larvae, recruits)
- + 110 meters (relevant recruits, juveniles)
- + 220 meters (relevant to juveniles, adults)
+-   55 meters (relevant to larvae, recruits)
+-   110 meters (relevant recruits, juveniles)
+-   220 meters (relevant to juveniles, adults)
 
 ```{r, c14}
 # Salinity 
@@ -576,28 +543,17 @@ depths
 
 #### Currents
 
-Cross-shelf processes may influence the retention or displacement of tilefish 
-during early life history stages. These are explored below.
+Cross-shelf processes may influence the retention or displacement of tilefish during early life history stages. These are explored below.
 
 ##### Shelf water volume
 
-Shelf water volume: A measure of the volume of water bounded inshore of the
-shelf-slope front. In this analysis, shelf water is defined as all water having 
-salinity <34 psu. The position of the shelf-slope front varies inter-annually
-with the higher shelf water values indicating the front being pushed further 
-towards the shelf break.
+Shelf water volume: A measure of the volume of water bounded inshore of the shelf-slope front. In this analysis, shelf water is defined as all water having salinity \<34 psu. The position of the shelf-slope front varies inter-annually with the higher shelf water values indicating the front being pushed further towards the shelf break.
 
-high shv: front pushed towards sbf
-low shv: front pushed inshore (more slope water on shelf)
+high shv: front pushed towards sbf low shv: front pushed inshore (more slope water on shelf)
 
-Hypothesis: Higher recruitment success correlated with years of higher shelf 
-water volume in spring/summer. These months months may be particularly 
-important as that is when spawning is occurring and the position of the sbf
-may influence the position of larvae (away from spawning grounds).
+Hypothesis: Higher recruitment success correlated with years of higher shelf water volume in spring/summer. These months months may be particularly important as that is when spawning is occurring and the position of the sbf may influence the position of larvae (away from spawning grounds).
 
-Additional variables in this dataset are shelf water temperature and salinity 
-which may also be indicative of habitat conditions. 
-
+Additional variables in this dataset are shelf water temperature and salinity which may also be indicative of habitat conditions.
 
 ```{r, s.w.volume}
 
@@ -733,7 +689,6 @@ ggplot2::ggplot(df.join,
 
 **3 Months**
 
-
 ```{r}
 ## Shelf water volume 3 month lag
 ggplot2::ggplot(df.join,
@@ -776,10 +731,7 @@ ggplot2::ggplot(df.join,
 
 ```
 
-
-
-Annual 
-
+Annual
 
 ```{r}
 
@@ -877,7 +829,7 @@ ggplot2::ggplot(df.join,
 
 ```
 
-With lags 
+With lags
 
 ```{r}
 
@@ -924,24 +876,15 @@ ggplot2::ggplot(df.join,
 
 ```
 
+#### Food availablity
 
-#### Food availablity 
+Larval tilefish eat zooplankton, likely calanus. *Calanus finmarchicus* are a copepod (crustacean) with a one-year life cycle and are an important food source for many commercially important species. Calanus spp. are lipid rich, herbivorous species that eat phytoplankton, diatoms in particular (Hobbs et al. 2020).
 
-Larval tilefish eat zooplankton, likely calanus. *Calanus finmarchicus* are a
-copepod (crustacean) with a one-year life cycle and are an important food 
-source for many commercially important species. Calanus spp. are lipid rich, 
-herbivorous species that eat phytoplankton, diatoms in particular 
-(Hobbs et al. 2020).
-
-Diatoms are often represented as microplankton (>20 µm), but many species are of
-the nanoplankton size class (2-20 µm), and a smaller few may even overlap 
-with picoplanton size class (<2 µm).
-
+Diatoms are often represented as microplankton (\>20 µm), but many species are of the nanoplankton size class (2-20 µm), and a smaller few may even overlap with picoplanton size class (\<2 µm).
 
 ##### Calanus
 
-Calanus is not as common in MAB, need to figure out dominant zooplankton in 
-MAB. 
+Calanus is not as common in MAB, need to figure out dominant zooplankton in MAB.
 
 ```{r, c16}
 # Calanus
@@ -961,7 +904,6 @@ ggplot() +
   theme_minimal()
 
 ```
-
 
 Georges Bank
 
@@ -1017,9 +959,7 @@ lines(df.c5$year, mod_prediction, col = "red")
 
 ```
 
-
-
-Mid-atlantic 
+Mid-atlantic
 
 ```{r, c18}
 # Mid-Atlantic Bight
@@ -1052,27 +992,19 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 
 ```
 
-
-
-
 ##### Microplankton
 
 ```{r, c19}
 # Microplankton
 ```
 
-
-
-
 ##### Chlorophyll-A
+
 ```{r, c20}
 
 # CHL-A
 
 ```
-
-
-
 
 ##### SST Fronts
 
@@ -1081,27 +1013,6 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 
 ```
 
+References:
 
-
-
-
-
-References: 
-
-
-Hobbs, L., Banas, N. S., Cottier, F. R., Berge, J., & Daase, M. (2020). Eat or 
-sleep: availability of winter prey explains mid-winter and spring activity in
-an Arctic Calanus population. Frontiers in Marine Science, 7, 541564.
-
-
-
-
-
-
-
-
-
-
-
-
-
+Hobbs, L., Banas, N. S., Cottier, F. R., Berge, J., & Daase, M. (2020). Eat or sleep: availability of winter prey explains mid-winter and spring activity in an Arctic Calanus population. Frontiers in Marine Science, 7, 541564.
