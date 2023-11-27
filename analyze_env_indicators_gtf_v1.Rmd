@@ -131,7 +131,7 @@ ggplot(catch.tally.ann, aes(x = factor(year), y = ttl_sum, group = 1))+
 
 #### CPUE
 
-Figure 2. Catch-per-unit-effot for undirected trawl trips from the Study fleet and observer program. Zeros have been added using species association methodology (via jaccard index).
+Figure 2. Catch-per-unit-effort for undirected trawl trips from the Study fleet and observer program. Zeros have been added using species association methodology (via jaccard index).
 
 [see here for example](https://static1.squarespace.com/static/511cdc7fe4b00307a2628ac6/t/64501a9ee391c8439cbc3c04/1682971295614/c_MRIP+Index_Drew+2022d.pdf)
 
@@ -301,6 +301,8 @@ barplot(tab[1:3], xlab = 'Length bins (mm)', main = '')
 #### Juveniles
 
 Young of year - year 1 and 2 size class
+
+Adelle comment: The more I look these, the less I'm sure what to do with it. Can we maybe sum across all these small sizes to produce an average yearly estimate?
 
 ```{r, c8}
 ggplot(lengths %>% filter(lenanml <= 26),
