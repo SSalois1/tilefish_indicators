@@ -1307,10 +1307,50 @@ ggplot2::ggplot(df.shlfvol.sfob,
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 
-
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(year >2007 & month %in% c(7,8,9,10,11,12)),
+                aes(x=mean_cpue, y=mean_v)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  labs(title = 'SFOB x M.S.W Summer/Fall (2007:2021)') +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
 
 ggplot2::ggplot(df.shlfvol.sfob %>% filter(year >2007 & month %in% c(7,8,9,10,11,12)),
-                aes(x=mean_cpue, y=mean_s)) + 
+                aes(x=mean_cpue, y=mean_v)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  labs(title = 'SFOB x M.S.W Summer/Fall (2007:2021)') +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(year >2007 & month %in% c(7,8,9,10,11,12)),
+                aes(x=mean_cpue, y=mean_t)) + 
   geom_point() +
   geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
               aes(colour = 'Linear')) + 
@@ -1429,7 +1469,7 @@ ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(7,8,9)),
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 
-##Shelf water volume fall - 2 month lag
+##Shelf water volume fall - 3 month lag
 ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(10,11,12)),
                 aes(x=mean_cpue, y=mean_v_lag3)) + 
   geom_point(color = 'black') +
@@ -1438,7 +1478,7 @@ ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(10,11,12)),
               geom = "smooth") +
   xlab('Mean CPUE/hr') +
   ylab('Mean shelf water volume') +
-  labs(title = 'Shelf water volume summer - 3 month lag') +
+  labs(title = 'Shelf water volume fall - 3 month lag') +
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 
@@ -1482,7 +1522,7 @@ ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_v",
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Mean CPUE/hr", ylab = "Mean shelf water volume")
+          xlab = "Mean CPUE/hr", ylab = "Mean shelf water volume", title="Shelf Water Volume and CPUE Correlation")
  
 # shelf water temperature
 lm_shlf_t<-lm(mean_t ~ mean_cpue, data=df.shlfvol.sfob)
@@ -1495,7 +1535,7 @@ ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_t",
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Mean CPUE/hr", ylab = "Mean shelf water temperature")
+          xlab = "Mean CPUE/hr", ylab = "Mean shelf water temperature", title="Shelf Water Temperature and CPUE Correlation")
 
 # shelf water salinity
 lm_shlf_s<-lm(mean_s ~ mean_cpue, data=df.shlfvol.sfob)
@@ -1508,7 +1548,7 @@ ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_s",
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Mean CPUE/hr", ylab = "Mean shelf water salinity")
+          xlab = "Mean CPUE/hr", ylab = "Mean shelf water salinity", title="Shelf Water Salinity and CPUE Correlation")
 
 ```
 
@@ -1557,21 +1597,31 @@ ggplot(gsi.sfob ,aes(x=mean_cpue, y=GSI)) +
   geom_hline(yintercept = 0, lty = 2) +
   theme_bw()
 
-#GSI Apr-July
-filter(gsi.sfob, month %in% c(4:7)) %>%
+#GSI Jan-Apr
+filter(gsi.sfob, month %in% c(1:4)) %>%
+ggplot(.,aes(x=mean_cpue, y=GSI)) + 
+ geom_point(color = 'black') +
+  xlab('Mean CPUE/hr') +
+  ylab('Gulf stream position anomaly') +
+  labs(title = 'Gulf stream index (Jan:Mar)') +
+  geom_hline(yintercept = 0, lty = 2) +
+  theme_bw()
+
+#GSI Sept-Dec
+filter(gsi.sfob, month %in% c(9:12)) %>%
 ggplot(.,aes(x=mean_cpue, y=GSI)) + 
   geom_point(color = 'black') +
-  xlab('Recruitment estimate') +
+  xlab('Mean CPUE/hr') +
   ylab('Gulf stream position anomaly') +
   labs(title = 'Gulf stream index (Apr:Jul)') +
   geom_hline(yintercept = 0, lty = 2) +
   theme_bw()
 
-# All years
+# All months
 ggplot(gsi.sfob, aes(x=mean_cpue, y=GSI)) + 
   geom_point(color = 'black') +
   geom_hline(yintercept = 0, lty = 2)+
-  labs(title = 'All years') +
+  labs(title = 'All months') +
   xlab('Mean CPUE/hr') +
   ylab('Gulf stream position anomaly') +
   geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
@@ -1592,7 +1642,7 @@ ggplot(gsi.sfob, aes(x=mean_cpue, y=GSI)) +
   theme_bw()
 
 #ANOVA
-pos_aov_cpue <- aov(mean_cpue ~ year * pos,
+pos_aov_cpue <- aov(mean_cpue ~ month * pos,
               data = gsi.sfob)
 
 # look at effects and interactions
@@ -1619,7 +1669,7 @@ cor.test(gsi.sfob$mean_cpue, gsi.sfob$GSI, method=c("pearson"))
 
 ggscatter(gsi.sfob, x = "mean_cpue", y = "GSI", 
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean CPUE/hr", ylab = "Mean Monthly GSI")
 ```
