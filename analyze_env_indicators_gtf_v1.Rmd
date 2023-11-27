@@ -62,7 +62,7 @@ sfob.env <- sfobs %>%
   mutate(YEAR = as.integer(YEAR)) %>% 
   rename_all(., .funs = tolower)
 
-write.csv(sfob.env, "C:/Users/stephanie.owen/Documents/tilefish_indicators/data/catch_data/sfob_env.csv", row.names=FALSE)
+#write.csv(sfob.env, "C:/Users/stephanie.owen/Documents/tilefish_indicators/data/catch_data/sfob_env.csv", row.names=FALSE)
 
 
 areas <- sort(unique(sfob.env$area))
@@ -586,28 +586,8 @@ data set to the Study fleet and Observer tilefish catch data.
 
 + Note here temperatures are averaged across all depths > 50 for each month.
 
-**Stephanie I hope the code below is a good jumping off point!** 
 
 ```{r}
-# Stephanie here I subset the years that are relevant to the Study fleet 
-# data set. Note that Paul suggested looking at catch that is from depths 
-# greater than 50 m and only from small mesh gear. The object sfob.env is
-# already filtered for just small gear (see line 57 above).
-
-
-# You can run this line just to check. 
-unique(sfob.env$mesh_bin)
-
-# the lines that create the df.lag object selects  depths > 50, just note 
-# that there are many depths here, so this is taking the average temperature
-# across all depths. We may want to think a bit more about how we want to 
-# subset for averaging (or not?)
-
-# here is a way to see what depths are reported 
-sort(unique(sfob.env$depth))
-
-# another note - since I group by year AND month - the lags are month specific. 
-# If you wanted to lag by year only, you would have to get rid of month below.
 
 #filter by year, depth, cpue (includes min, max, and sd of bottomt by month)
 df.lag.cpue = sfob.env %>% filter(year > 2006 & depth > 50 & cpue_hr > 0) %>%
@@ -790,7 +770,6 @@ ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(10,11,12)),
 **Corrleation and figures for sf/ob data and in-situ bottom temps**
 
 ```{r}
-library("ggpubr")
 lm_bt<-lm(mean_bt ~ mean_cpue, data=df.lag.sfob)
 summary(lm_bt)
 #plot(mean_bt ~ mean_cpue, data=df.lag.sfob, pch=1, col="dodgerblue") + abline(lm_bt)
@@ -806,13 +785,6 @@ ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt",
 
 #ggqqplot(df.lag.sfob$mean_bt, ylab="Mean BT")
 #ggqqplot(df.lag.sfob$mean_cpue, ylab="Mean CPUE")
-
-#cor.test(df.lag.sfob$mean_cpue, df.lag.sfob$mean_bt, method=c("spearman"))
-
-#ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt", 
-         # add = "reg.line", conf.int = TRUE, 
-         # cor.coef = TRUE, cor.method = "spearman",
-         # xlab = "Mean CPUE/hr", ylab = "Mean bottom temp (°C)")
 
 
 ```
@@ -951,6 +923,7 @@ df.join = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
 # See what months have data
 sort(unique(df.join$month))
 hist(df.join$month) # will group into spring/summer fall/winter categories
+
 ## Shelf water volume no lag
 ggplot2::ggplot(df.join,
                 aes(x=recruit_est, y=mean_v)) + 
@@ -1232,6 +1205,424 @@ ggplot2::ggplot(df.join,
 
 ```
 
+**Shelf water volume with Study fleet/Observer data**
+
+```{r}
+# Create shw vol by month w/lag
+df.lag = shlfvol %>%
+  group_by(year,month) %>% 
+  summarise(mean_t = mean(ShW.T),
+            mean_s = mean(ShW.S),
+            mean_v = mean(ShW.Vol)) %>% 
+  mutate(mean_t_lag2 = lag(mean_t,2),
+         mean_t_lag3 = lag(mean_t,3),
+         mean_s_lag2 = lag(mean_s,2),
+         mean_s_lag3 = lag(mean_s,3),
+         mean_v_lag2 = lag(mean_v,2),
+         mean_v_lag3 = lag(mean_v,3))
+
+#filter sfob.env 
+shlfvol.sfob = sfob.env %>% filter(depth > 50) %>%
+  group_by(year,month) %>% 
+  summarise(mean_dpth = mean(depth),
+            mean_bt = mean(bottomt),
+            mean_cpue = mean(cpue_hr))
+
+# Join with sf/ob data
+df.shlfvol.sfob = dplyr::full_join(shlfvol.sfob, df.lag, by = join_by(year, month)) %>%
+  dplyr::select(year, month, mean_cpue, mean_t, mean_s, mean_v, 
+                mean_t_lag2, mean_s_lag2, mean_v_lag2,
+                mean_t_lag3, mean_s_lag3, mean_v_lag3) %>%
+  tidyr::drop_na()
+
+#See what months have data
+sort(unique(df.shlfvol.sfob$month))
+hist(df.shlfvol.sfob$month) #summer and fall
+```
+No lags
+
+```{r}
+## Shelf water volume no lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_v)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume summer
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=mean_v)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume summer') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume fall
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(10,11,12)),
+                aes(x=mean_cpue, y=mean_v)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume fall') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water temp no lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_t)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water salinity no lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_s)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+
+
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(year >2007 & month %in% c(7,8,9,10,11,12)),
+                aes(x=mean_cpue, y=mean_s)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  labs(title = 'SFOB x M.S.W Summer/Fall (2007:2021)') +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+```
+
+**2 month lags**
+
+```{r}
+## Shelf water volume 2 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_v_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume summer - 2 month lag
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=mean_v_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume summer - 2 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume fall - 2 month lag
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(10,11,12)),
+                aes(x=mean_cpue, y=mean_v_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume fall - 2 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water temperature 2 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_t_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water salinity 2 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_s_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+```
+
+**3 month lags**
+
+```{r}
+## Shelf water volume 3 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_v_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume - lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume summer - 3 month lag
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=mean_v_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume summer - 3 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume fall - 2 month lag
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(10,11,12)),
+                aes(x=mean_cpue, y=mean_v_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume summer - 3 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water temperature 3 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_t_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature - lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water salinity 3 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_s_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity - lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+```
+
+**Correlations between sf/ob data and shelf water volume/temp/salinity**
+
+```{r}
+lm_shlf<-lm(mean_v ~ mean_cpue, data=df.shlfvol.sfob)
+summary(lm_shlf)
+plot(mean_v ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf)
+
+cor.test(df.shlfvol.sfob$mean_cpue, df.shlfvol.sfob$mean_v, method=c("pearson"))
+
+ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_v", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean shelf water volume")
+ 
+# shelf water temperature
+lm_shlf_t<-lm(mean_t ~ mean_cpue, data=df.shlfvol.sfob)
+summary(lm_shlf_t)
+plot(mean_t ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf_t)
+
+cor.test(df.shlfvol.sfob$mean_cpue, df.shlfvol.sfob$mean_t, method=c("pearson"))
+
+ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_t", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean shelf water temperature")
+
+# shelf water salinity
+lm_shlf_s<-lm(mean_s ~ mean_cpue, data=df.shlfvol.sfob)
+summary(lm_shlf_s)
+plot(mean_s ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf_s)
+
+cor.test(df.shlfvol.sfob$mean_cpue, df.shlfvol.sfob$mean_s, method=c("pearson"))
+
+ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_s", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean shelf water salinity")
+
+```
+
+##### Gulf-stream index
+
+Gulf stream index was calculated based on method presented by 
+Pérez-Hernández and Joyce (2014). The gulf stream index (GSI) is a measure of 
+the degrees latitude above the average Gulf Stream position based on ocean
+temperature at 200m (15 C) depth between 55W to 75W.
+
+Positive values indicate a the mean position of the GS is more Northernly, 
+whereas negative values indicate a more Southernly position. 
+
+```{r}
+#gsi.m <- read.csv(here::here('C:/Users/stephanie.owen/Documents/tilefish_indicators/gulf_stream_index/mm_gsi_1954_2022_chen.csv'))
+
+#subset only GSI, month, year and 1997>
+#gsi<-gsi.m[c("GSI","year","month")] %>%
+ # filter(year > 1997)
+#write.csv(gsi, "C:/Users/stephanie.owen/Documents/tilefish_indicators/gulf_stream_index/gsi.csv", row.names=FALSE)
+
+#filter sfob.env 
+#gsi.sfob <- sfob.env %>% filter(depth > 50) %>%
+ # group_by(year,month) %>% 
+  #summarise(mean_cpue = mean(cpue_hr))
+#write.csv(gsi.sfob, "C:/Users/stephanie.owen/Documents/tilefish_indicators/gulf_stream_index/gsi_sfob.csv", row.names=FALSE)
+
+#new df wouldn't recognize month when joining the gsi and sfob data so I did it manually 
+gsi <- read.csv(here::here('C:/Users/stephanie.owen/Documents/tilefish_indicators/gulf_stream_index/gsi_sfob.csv'))
+
+gsi.sfob<-mutate(gsi, pos = ifelse(GSI > 0, 'Northerly', 'Southerly'), 
+         n.pos = ifelse(GSI > 0, 1, 0))
+
+```
+
+**GSI by Month and Season**
+
+```{r}
+# GSI all months (1998-2022)
+ggplot(gsi.sfob ,aes(x=mean_cpue, y=GSI)) + 
+  geom_point(color = 'black') +
+  facet_wrap(~month)+
+  xlab('Mean CPUE/hr') +
+  ylab('Gulf stream position anomaly') +
+  labs(title = 'Gulf stream index by month') +
+  geom_hline(yintercept = 0, lty = 2) +
+  theme_bw()
+
+#GSI Apr-July
+filter(gsi.sfob, month %in% c(4:7)) %>%
+ggplot(.,aes(x=mean_cpue, y=GSI)) + 
+  geom_point(color = 'black') +
+  xlab('Recruitment estimate') +
+  ylab('Gulf stream position anomaly') +
+  labs(title = 'Gulf stream index (Apr:Jul)') +
+  geom_hline(yintercept = 0, lty = 2) +
+  theme_bw()
+
+# All years
+ggplot(gsi.sfob, aes(x=mean_cpue, y=GSI)) + 
+  geom_point(color = 'black') +
+  geom_hline(yintercept = 0, lty = 2)+
+  labs(title = 'All years') +
+  xlab('Mean CPUE/hr') +
+  ylab('Gulf stream position anomaly') +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+
+#ANOVA
+pos_aov_cpue <- aov(mean_cpue ~ year * pos,
+              data = gsi.sfob)
+
+# look at effects and interactions
+summary(pos_aov_cpue)
+tidy_pos_aov_cpue <- broom::tidy(pos_aov_cpue)
+tidy_pos_aov_cpue
+
+ggplot(data = gsi.sfob, 
+             aes(x = mean_cpue, y = GSI, fill = pos,  
+                 group = year)) +
+   geom_bar(color = "black", stat = "identity", 
+            position = position_dodge2(preserve = "single"), width = 20) +
+  theme_bw() +
+  labs(title = '1998-2022',
+       x = "Mean CPUE/hr", 
+       y = "Gulf stream position anomaly")
+
+#correlations gsi and cpue
+lm_gsi<-lm(GSI ~ mean_cpue, data=gsi.sfob)
+summary(lm_gsi)
+plot(GSI ~ mean_cpue, data=gsi.sfob, pch=1, col="dodgerblue") + abline(lm_gsi)
+
+cor.test(gsi.sfob$mean_cpue, gsi.sfob$GSI, method=c("pearson"))
+
+ggscatter(gsi.sfob, x = "mean_cpue", y = "GSI", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean Monthly GSI")
+```
 
 #### Food availablity 
 
