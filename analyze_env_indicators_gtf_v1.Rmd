@@ -1222,7 +1222,7 @@ df.lag = shlfvol %>%
          mean_v_lag3 = lag(mean_v,3))
 
 #filter sfob.env 
-shlfvol.sfob = sfob.env %>% filter(depth > 50) %>%
+shlfvol.sfob = sfob.env %>% filter(depth > 50, cpue_hr > 0) %>%
   group_by(year,month) %>% 
   summarise(mean_dpth = mean(depth),
             mean_bt = mean(bottomt),
@@ -1239,7 +1239,8 @@ df.shlfvol.sfob = dplyr::full_join(shlfvol.sfob, df.lag, by = join_by(year, mont
 sort(unique(df.shlfvol.sfob$month))
 hist(df.shlfvol.sfob$month) #summer and fall
 ```
-No lags
+
+**No lags**
 
 ```{r}
 ## Shelf water volume no lag
@@ -1329,7 +1330,7 @@ ggplot2::ggplot(df.shlfvol.sfob %>% filter(year >2007 & month %in% c(7,8,9,10,11
   theme_bw()
 
 ggplot2::ggplot(df.shlfvol.sfob %>% filter(year >2007 & month %in% c(7,8,9,10,11,12)),
-                aes(x=mean_cpue, y=mean_v)) + 
+                aes(x=mean_cpue, y=mean_s)) + 
   geom_point() +
   geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
               aes(colour = 'Linear')) + 
@@ -1579,7 +1580,9 @@ whereas negative values indicate a more Southernly position.
 #new df wouldn't recognize month when joining the gsi and sfob data so I did it manually 
 gsi <- read.csv(here::here('C:/Users/stephanie.owen/Documents/tilefish_indicators/gulf_stream_index/gsi_sfob.csv'))
 
-gsi.sfob<-mutate(gsi, pos = ifelse(GSI > 0, 'Northerly', 'Southerly'), 
+gsi_nozero <- filter(gsi, mean_cpue > 0)
+
+gsi.sfob<-mutate(gsi_nozero, pos = ifelse(GSI > 0, 'Northerly', 'Southerly'), 
          n.pos = ifelse(GSI > 0, 1, 0))
 
 ```
@@ -1828,13 +1831,11 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 ```{r}
 
 # CHL-A
-
+chl<-read.csv(here::here('data/chl/chl_ts_gtf_strata.csv'))
 ```
 
 ##### Maps (Chlorophyll-A) {.tabset}
 ```{r, chlmaps, results='asis'}
-
-# CHL-A
 
 ```
 
@@ -1842,10 +1843,33 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 
 ```{r, c21}
 
-# CHL-A
+#filter sfob.env 
+sfob <- sfob.env %>% filter(depth > 50) %>%
+  group_by(year,month) %>% 
+  summarise(mean_cpue = mean(cpue_hr))
+
+# Join with sf/ob data
+chl.sfob <- dplyr::full_join(chl, sfob, by = join_by(year, month)) %>%
+  dplyr::select(year, month, mean_cpue, mean_chl, weighted_mean_chl) %>%
+  tidyr::drop_na()
 
 ```
 
+**CHL-a and CPUE correlation**
+
+```{r}
+lm_chl<-lm(weighted_mean_chl ~ mean_cpue, data=chl.sfob)
+summary(lm_chl)
+
+plot(weighted_mean_chl ~ mean_cpue, data=chl.sfob, pch=1, col="dodgerblue") + abline(lm_chl)
+
+cor.test(chl.sfob$mean_cpue, chl.sfob$weighted_mean_chl, method=c("pearson"))
+ggscatter(chl.sfob, x = "mean_cpue", y = "weighted_mean_chl", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean Monthly CHL-a")
+```
 
 
 
