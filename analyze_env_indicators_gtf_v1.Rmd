@@ -34,6 +34,7 @@ library(ggdist)
 library(ggpubr)
 library(wesanderson)
 library(raster)
+library(mgcv)
 #library(glmTMB)
 
 # CPUE data (no env covariates)
@@ -786,6 +787,17 @@ ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt",
 #ggqqplot(df.lag.sfob$mean_bt, ylab="Mean BT")
 #ggqqplot(df.lag.sfob$mean_cpue, ylab="Mean CPUE")
 
+
+```
+
+**SFOB insitu bottom temp GAM**
+
+```{r}
+bt_gam <- gam(mean_bt ~ s(mean_cpue, k=50), data=df.lag.sfob, sp=0.01)
+gam.check(bt_gam)
+summary(bt_gam)
+
+plot(bt_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(bt_gam)[1])
 
 ```
 
@@ -1553,6 +1565,18 @@ ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_s",
 
 ```
 
+**Shelf water volume GAM**
+
+```{r}
+#shelf vol GAM
+shlfvol_gam <- gam(mean_v ~ s(mean_cpue, k=15), data=df.shlfvol.sfob, sp=0.01)
+gam.check(shlfvol_gam)
+summary(shlfvol_gam)
+
+plot(shlfvol_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(shlfvol_gam)[1])
+
+```
+
 ##### Gulf-stream index
 
 Gulf stream index was calculated based on method presented by 
@@ -1663,6 +1687,11 @@ ggplot(data = gsi.sfob,
        x = "Mean CPUE/hr", 
        y = "Gulf stream position anomaly")
 
+```
+
+**Correlations and GAM**
+
+```{r}
 #correlations gsi and cpue
 lm_gsi<-lm(GSI ~ mean_cpue, data=gsi.sfob)
 summary(lm_gsi)
@@ -1675,6 +1704,13 @@ ggscatter(gsi.sfob, x = "mean_cpue", y = "GSI",
           cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean CPUE/hr", ylab = "Mean Monthly GSI")
+
+#GSI GAM
+gsi_gam <- gam(GSI ~ s(mean_cpue, k=50), data=gsi.sfob, sp=0.01)
+gam.check(gsi_gam)
+summary(gsi_gam)
+
+plot(gsi_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(gsi_gam)[1])
 ```
 
 #### Food availablity 
@@ -1842,17 +1878,100 @@ chl<-read.csv(here::here('data/chl/chl_ts_gtf_strata.csv'))
 ##### Chlorophyll-A analysis
 
 ```{r, c21}
+# chl by month with lag
+chl.lag <- chl %>%
+  mutate(mean_chl_lag2 = lag(weighted_mean_chl,2),
+         mean_chl_lag3 = lag(weighted_mean_chl,3),
+         mean_chl_lag6 = lag(weighted_mean_chl,6))
 
-#filter sfob.env 
-sfob <- sfob.env %>% filter(depth > 50) %>%
+# filter sfob.env 
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0) %>%
   group_by(year,month) %>% 
-  summarise(mean_cpue = mean(cpue_hr))
-
+  summarise(mean_cpue = mean(cpue_hr)) 
+         
 # Join with sf/ob data
-chl.sfob <- dplyr::full_join(chl, sfob, by = join_by(year, month)) %>%
-  dplyr::select(year, month, mean_cpue, mean_chl, weighted_mean_chl) %>%
+chl.sfob <- dplyr::full_join(chl.lag, sfob, by = join_by(year, month)) %>%
+  dplyr::select(year, month, mean_cpue, mean_chl, weighted_mean_chl, mean_chl_lag2, mean_chl_lag3, mean_chl_lag6) %>%
   tidyr::drop_na()
 
+
+## CHL-a no lag
+ggplot2::ggplot(chl.sfob,
+                aes(x=mean_cpue, y=weighted_mean_chl)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Mean CHL-a no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## CHL summer
+ggplot2::ggplot(chl.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=weighted_mean_chl)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Summer Mean CHL-a') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## CHL fall
+ggplot2::ggplot(chl.sfob %>% filter(month %in% c(10,11,12)),
+                aes(x=mean_cpue, y=weighted_mean_chl)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Fall Mean CHL-a') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 2 month lag
+ggplot2::ggplot(chl.sfob,
+                aes(x=mean_cpue, y=mean_chl_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Mean CHL-a 2 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 3 month lag
+ggplot2::ggplot(chl.sfob,
+                aes(x=mean_cpue, y=mean_chl_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Mean CHL-a 3 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 6 month lag
+ggplot2::ggplot(chl.sfob,
+                aes(x=mean_cpue, y=mean_chl_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Mean CHL-a 6 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
 ```
 
 **CHL-a and CPUE correlation**
@@ -1869,6 +1988,15 @@ ggscatter(chl.sfob, x = "mean_cpue", y = "weighted_mean_chl",
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean CPUE/hr", ylab = "Mean Monthly CHL-a")
+```
+**CHL-a GAM**
+
+```{r}
+chl_gam <- gam(weighted_mean_chl ~ s(mean_cpue, k=20), data=chl.sfob, sp=0.01)
+gam.check(chl_gam)
+summary(chl_gam)
+
+plot(chl_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(chl_gam)[1])
 ```
 
 
