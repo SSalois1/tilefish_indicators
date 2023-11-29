@@ -36,6 +36,7 @@ library(wesanderson)
 library(raster)
 library(mgcv)
 #library(glmTMB)
+library(ggpmisc)
 
 # CPUE data (no env covariates)
 gt_data_model_cpue <- read.csv(here::here('data/catch_data/gt_data_model_cpue.csv'))
@@ -367,7 +368,7 @@ and salinity may be of interest.
 
 ```{r, c9}
 # SST
-
+sst<-read.csv(here::here('data/sst/sst_ts_gtf_strata.csv'))
 ```
 
 ##### Maps (SST) {.tabset}
@@ -380,7 +381,123 @@ and salinity may be of interest.
 
 
 ```{r}
+# SST by month with lag
+sst.lag <- sst %>%
+  mutate(mean_sst_lag2 = lag(weighted_mean_sst,2),
+         mean_sst_lag3 = lag(weighted_mean_sst,3),
+         mean_sst_lag6 = lag(weighted_mean_sst,6))
 
+# filter sfob.env 
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0) %>%
+  group_by(year,month) %>% 
+  summarise(mean_cpue = mean(cpue_hr)) 
+         
+# Join with sf/ob data
+sst.sfob <- dplyr::full_join(sst.lag, sfob, by = join_by(year, month)) %>%
+  dplyr::select(year, month, mean_cpue, mean_sst, weighted_mean_sst, mean_sst_lag2, mean_sst_lag3, mean_sst_lag6) %>%
+  tidyr::drop_na()
+
+
+## SST no lag
+ggplot2::ggplot(sst.sfob,
+                aes(x=mean_cpue, y=weighted_mean_sst)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Mean SST no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## SST summer
+ggplot2::ggplot(sst.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=weighted_mean_sst)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Summer Mean SST') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## SST spring
+ggplot2::ggplot(sst.sfob %>% filter(month %in% c(4,5,6)),
+                aes(x=mean_cpue, y=weighted_mean_sst)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Spring Mean SST') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 2 month lag
+ggplot2::ggplot(sst.sfob,
+                aes(x=mean_cpue, y=mean_sst_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Mean SST 2 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 3 month lag
+ggplot2::ggplot(sst.sfob,
+                aes(x=mean_cpue, y=mean_sst_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Mean SST 3 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 6 month lag
+ggplot2::ggplot(sst.sfob,
+                aes(x=mean_cpue, y=mean_sst_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Mean SST 6 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+```
+**SST Correlation and GAM**
+
+```{r}
+# Correlation and plot
+lm_sst<-lm(weighted_mean_sst ~ mean_cpue, data=sst.sfob)
+summary(lm_sst)
+
+plot(weighted_mean_sst ~ mean_cpue, data=sst.sfob, pch=1, col="dodgerblue") + abline(lm_sst)
+
+cor.test(sst.sfob$mean_cpue, sst.sfob$weighted_mean_sst, method=c("pearson"))
+ggscatter(sst.sfob, x = "mean_cpue", y = "weighted_mean_sst", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Weighted Mean SST")
+
+# GAM
+sst_gam <- gam(weighted_mean_sst ~ s(mean_cpue, k=20), data=sst.sfob, sp=0.1)
+#gam.check(sst_gam)
+#summary(sst_gam)
+
+plot(sst_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(sst_gam)[1])
 ```
 
 
@@ -794,8 +911,8 @@ ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt",
 
 ```{r}
 bt_gam <- gam(mean_bt ~ s(mean_cpue, k=50), data=df.lag.sfob, sp=0.01)
-gam.check(bt_gam)
-summary(bt_gam)
+#gam.check(bt_gam)
+#summary(bt_gam)
 
 plot(bt_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(bt_gam)[1])
 
@@ -1570,8 +1687,8 @@ ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_s",
 ```{r}
 #shelf vol GAM
 shlfvol_gam <- gam(mean_v ~ s(mean_cpue, k=15), data=df.shlfvol.sfob, sp=0.01)
-gam.check(shlfvol_gam)
-summary(shlfvol_gam)
+#gam.check(shlfvol_gam)
+#summary(shlfvol_gam)
 
 plot(shlfvol_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(shlfvol_gam)[1])
 
@@ -1707,8 +1824,8 @@ ggscatter(gsi.sfob, x = "mean_cpue", y = "GSI",
 
 #GSI GAM
 gsi_gam <- gam(GSI ~ s(mean_cpue, k=50), data=gsi.sfob, sp=0.01)
-gam.check(gsi_gam)
-summary(gsi_gam)
+#gam.check(gsi_gam)
+#summary(gsi_gam)
 
 plot(gsi_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(gsi_gam)[1])
 ```
@@ -1844,20 +1961,138 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 
 
 ##### Microplankton
+```{r}
+# microplankton
+micro<-read.csv(here::here('data/phyto_size_class/microplankton_ts_gtf_strata.csv'))
+```
 
 
 ##### Microplankton maps {.tabset}
 
 ```{r, micromaps, results='asis'}
 
-# microplankton
-
 ```
 
 ##### Microplankton analysis
 
 ```{r}
-# Microplankton
+# microplankton by month with lag
+micro.lag <- micro %>%
+  mutate(mean_micro_lag2 = lag(weighted_mean_micro,2),
+         mean_micro_lag3 = lag(weighted_mean_micro,3),
+         mean_micro_lag6 = lag(weighted_mean_micro,6))
+
+# filter sfob.env 
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0) %>%
+  group_by(year,month) %>% 
+  summarise(mean_cpue = mean(cpue_hr)) 
+         
+# Join with sf/ob data
+micro.sfob <- dplyr::full_join(micro.lag, sfob, by = join_by(year, month)) %>%
+  dplyr::select(year, month, mean_cpue, mean_micro, weighted_mean_micro, mean_micro_lag2, mean_micro_lag3, mean_micro_lag6) %>%
+  tidyr::drop_na()
+
+
+## Microplankton no lag
+ggplot2::ggplot(micro.sfob,
+                aes(x=mean_cpue, y=weighted_mean_micro)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Mean Microplankton no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Microplankton summer
+ggplot2::ggplot(micro.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=weighted_mean_micro)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Summer Mean Microplankton') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Microplankton spring
+ggplot2::ggplot(micro.sfob %>% filter(month %in% c(4,5,6)),
+                aes(x=mean_cpue, y=weighted_mean_micro)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Spring Mean Microplankton') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 2 month lag
+ggplot2::ggplot(micro.sfob,
+                aes(x=mean_cpue, y=mean_micro_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Mean Microplankton 2 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 3 month lag
+ggplot2::ggplot(micro.sfob,
+                aes(x=mean_cpue, y=mean_micro_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Mean Microplankton 3 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 6 month lag
+ggplot2::ggplot(micro.sfob,
+                aes(x=mean_cpue, y=mean_micro_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Mean Microplankton 6 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+```
+**Micro correlation and GAM**
+
+```{r}
+# Correlation and plot
+lm_micro<-lm(weighted_mean_micro ~ mean_cpue, data=micro.sfob)
+summary(lm_micro)
+
+plot(weighted_mean_micro ~ mean_cpue, data=micro.sfob, pch=1, col="dodgerblue") + abline(lm_micro)
+
+cor.test(micro.sfob$mean_cpue, micro.sfob$weighted_mean_micro, method=c("pearson"))
+ggscatter(micro.sfob, x = "mean_cpue", y = "weighted_mean_micro", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Weighted Mean Microplankton")
+
+# GAM
+micro_gam <- gam(weighted_mean_micro ~ s(mean_cpue, k=20), data=micro.sfob, sp=0.01)
+#gam.check(micro_gam)
+#summary(micro_gam)
+
+plot(micro_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(micro_gam)[1])
 ```
 
 
@@ -1993,8 +2228,8 @@ ggscatter(chl.sfob, x = "mean_cpue", y = "weighted_mean_chl",
 
 ```{r}
 chl_gam <- gam(weighted_mean_chl ~ s(mean_cpue, k=20), data=chl.sfob, sp=0.01)
-gam.check(chl_gam)
-summary(chl_gam)
+#gam.check(chl_gam)
+#summary(chl_gam)
 
 plot(chl_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(chl_gam)[1])
 ```
@@ -2005,6 +2240,9 @@ plot(chl_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightbl
 
 ```{r}
 # SST fronts
+fprob<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_3x3.csv')) #fprob across all individual strata
+fprob.ind<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_indv_substrata_3x3.csv')) #mean for each of 14 substrata
+frob.ns<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_n_v_s_substrata_3x3.csv')) #mean for substrata N and S of Hudson canyon
 
 ```
 
@@ -2016,11 +2254,205 @@ plot(chl_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightbl
 
 ##### SST Fronts analysis
 
+**FPROB across all individual strata**
 ```{r}
+#sfob by season
+sfob_season<-read.csv(here::here('data/sst_fronts/sfob_byseason.csv'))
+         
+#join with fprob
+fprob.sfob <- dplyr::full_join(fprob, sfob_season, by = join_by(year, season)) %>%
+  dplyr::select(year, season, mean_cpue, mean_fprob, weighted_mean_fprob) %>%
+  tidyr::drop_na()
 
+## All months
+ggplot2::ggplot(fprob.sfob,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Mean SST frontal probability') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Winter
+ggplot2::ggplot(fprob.sfob %>% filter(season == "winter") ,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Winter Mean SST frontal probability') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Spring
+ggplot2::ggplot(fprob.sfob %>% filter(season == "spring"),
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Spring Mean SST frontal probability') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer
+ggplot2::ggplot(fprob.sfob %>% filter(season == "summer"),
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Summer Mean SST frontal probability') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Fall
+ggplot2::ggplot(fprob.sfob %>% filter(season == "fall"),
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Fall Mean SST frontal probability') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Correlation and GAM
+lm_fprob<-lm(weighted_mean_fprob ~ mean_cpue, data=fprob.sfob)
+summary(lm_fprob)
+
+plot(weighted_mean_fprob ~ mean_cpue, data=fprob.sfob, pch=1, col="dodgerblue") + abline(lm_fprob)
+
+cor.test(fprob.sfob$mean_cpue, fprob.sfob$weighted_mean_fprob, method=c("pearson"))
+ggscatter(fprob.sfob, x = "mean_cpue", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean Seasonal SST Frontal probability")
+
+fprob_gam <- gam(weighted_mean_fprob ~ s(mean_cpue, k=30), data=fprob.sfob, sp=0.001)
+gam.check(fprob_gam)
+summary(fprob_gam)
+
+plot(fprob_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(fprob_gam)[1])
 
 ```
 
+**FPROB of each substrata**
+
+```{r}
+#join with fprob
+ind.sfob <- dplyr::full_join(fprob.ind, sfob_season, by = join_by(year, season)) %>%
+  dplyr::select(year, season, id, mean_cpue, mean_fprob, weighted_mean_fprob) %>%
+  tidyr::drop_na()
+
+# fprob by substrata
+ggplot2::ggplot(ind.sfob,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Mean SST frontal probability') +
+  stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+               label.x.npc = 30, label.y.npc = 0.15,
+               parse = TRUE, size = 3)  +
+  theme_bw() +
+  facet_wrap(~id) +
+  theme_facet()
+
+## Winter
+ggplot2::ggplot(ind.sfob %>% filter(season == "winter") ,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Winter Mean SST frontal probability') +
+  stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+               label.x.npc = 30, label.y.npc = 0.15,
+               parse = TRUE, size = 3)  +
+  theme_bw() +
+  facet_wrap(~id) +
+  theme_facet()
+
+## Spring
+ggplot2::ggplot(ind.sfob %>% filter(season == "spring") ,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Spring Mean SST frontal probability') +
+  stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+               label.x.npc = 30, label.y.npc = 0.15,
+               parse = TRUE, size = 3)  +
+  theme_bw() +
+  facet_wrap(~id) +
+  theme_facet()
+
+## Summer
+ggplot2::ggplot(ind.sfob %>% filter(season == "summer") ,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Summer Mean SST frontal probability') +
+  stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+               label.x.npc = 30, label.y.npc = 0.15,
+               parse = TRUE, size = 3)  +
+  theme_bw() +
+  facet_wrap(~id) +
+  theme_facet()
+
+## Fall
+ggplot2::ggplot(ind.sfob %>% filter(season == "fall") ,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Fall Mean SST frontal probability') +
+  stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+               label.x.npc = 30, label.y.npc = 0.15,
+               parse = TRUE, size = 3)  +
+  theme_bw() +
+  facet_wrap(~id) +
+  theme_facet()
+
+## Scatter plot with correlations
+ggscatter(ind.sfob, x = "mean_cpue", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean SST frontal probability") +
+  facet_wrap(~id) +
+  theme_facet()
+```
 
 
 
