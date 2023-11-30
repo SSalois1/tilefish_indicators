@@ -37,6 +37,8 @@ library(raster)
 library(mgcv)
 #library(glmTMB)
 library(ggpmisc)
+library(mgcViz)
+library(gratia)
 
 # CPUE data (no env covariates)
 gt_data_model_cpue <- read.csv(here::here('data/catch_data/gt_data_model_cpue.csv'))
@@ -493,11 +495,11 @@ ggscatter(sst.sfob, x = "mean_cpue", y = "weighted_mean_sst",
           xlab = "Mean CPUE/hr", ylab = "Weighted Mean SST")
 
 # GAM
-sst_gam <- gam(weighted_mean_sst ~ s(mean_cpue, k=20), data=sst.sfob, sp=0.1)
+sst_gam <- gam(weighted_mean_sst ~ s(mean_cpue), data=sst.sfob, method="REML")
 #gam.check(sst_gam)
 #summary(sst_gam)
 
-plot(sst_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(sst_gam)[1])
+draw(sst_gam, residuals=TRUE)
 ```
 
 
@@ -910,11 +912,11 @@ ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt",
 **SFOB insitu bottom temp GAM**
 
 ```{r}
-bt_gam <- gam(mean_bt ~ s(mean_cpue, k=50), data=df.lag.sfob, sp=0.01)
+bt_gam <- gam(mean_bt ~ s(mean_cpue), data=df.lag.sfob, method="REML")
 #gam.check(bt_gam)
 #summary(bt_gam)
 
-plot(bt_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(bt_gam)[1])
+draw(bt_gam, residuals=TRUE)
 
 ```
 
@@ -1686,11 +1688,11 @@ ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_s",
 
 ```{r}
 #shelf vol GAM
-shlfvol_gam <- gam(mean_v ~ s(mean_cpue, k=15), data=df.shlfvol.sfob, sp=0.01)
+shlfvol_gam <- gam(mean_v ~ s(mean_cpue), data=df.shlfvol.sfob, method="REML")
 #gam.check(shlfvol_gam)
 #summary(shlfvol_gam)
 
-plot(shlfvol_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(shlfvol_gam)[1])
+draw(shlfvol_gam, residuals=TRUE)
 
 ```
 
@@ -1823,11 +1825,11 @@ ggscatter(gsi.sfob, x = "mean_cpue", y = "GSI",
           xlab = "Mean CPUE/hr", ylab = "Mean Monthly GSI")
 
 #GSI GAM
-gsi_gam <- gam(GSI ~ s(mean_cpue, k=50), data=gsi.sfob, sp=0.01)
+gsi_gam <- gam(GSI ~ s(mean_cpue), data=gsi.sfob, method="REML")
 #gam.check(gsi_gam)
 #summary(gsi_gam)
 
-plot(gsi_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(gsi_gam)[1])
+draw(gsi_gam, residuals=TRUE)
 ```
 
 #### Food availablity 
@@ -2088,11 +2090,11 @@ ggscatter(micro.sfob, x = "mean_cpue", y = "weighted_mean_micro",
           xlab = "Mean CPUE/hr", ylab = "Weighted Mean Microplankton")
 
 # GAM
-micro_gam <- gam(weighted_mean_micro ~ s(mean_cpue, k=20), data=micro.sfob, sp=0.01)
+micro_gam <- gam(weighted_mean_micro ~ s(mean_cpue), data=micro.sfob, method="REML")
 #gam.check(micro_gam)
 #summary(micro_gam)
 
-plot(micro_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(micro_gam)[1])
+draw(micro_gam, residuals=TRUE)
 ```
 
 
@@ -2227,11 +2229,11 @@ ggscatter(chl.sfob, x = "mean_cpue", y = "weighted_mean_chl",
 **CHL-a GAM**
 
 ```{r}
-chl_gam <- gam(weighted_mean_chl ~ s(mean_cpue, k=20), data=chl.sfob, sp=0.01)
+chl_gam <- gam(weighted_mean_chl ~ s(mean_cpue), data=chl.sfob, method="REML")
 #gam.check(chl_gam)
 #summary(chl_gam)
 
-plot(chl_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(chl_gam)[1])
+draw(chl_gam, residuals=TRUE)
 ```
 
 
@@ -2342,11 +2344,11 @@ ggscatter(fprob.sfob, x = "mean_cpue", y = "weighted_mean_fprob",
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean CPUE/hr", ylab = "Mean Seasonal SST Frontal probability")
 
-fprob_gam <- gam(weighted_mean_fprob ~ s(mean_cpue, k=30), data=fprob.sfob, sp=0.001)
-gam.check(fprob_gam)
-summary(fprob_gam)
+fprob_gam <- gam(weighted_mean_fprob ~ s(mean_cpue), data=fprob.sfob, method="REML")
+#gam.check(fprob_gam)
+#summary(fprob_gam)
 
-plot(fprob_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightblue", seWithMean = TRUE, shift = coef(fprob_gam)[1])
+draw(fprob_gam, residuals=TRUE)
 
 ```
 
