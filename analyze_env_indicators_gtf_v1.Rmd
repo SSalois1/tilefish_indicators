@@ -2242,7 +2242,7 @@ plot(chl_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="lightbl
 # SST fronts
 fprob<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_3x3.csv')) #fprob across all individual strata
 fprob.ind<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_indv_substrata_3x3.csv')) #mean for each of 14 substrata
-frob.ns<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_n_v_s_substrata_3x3.csv')) #mean for substrata N and S of Hudson canyon
+fprob.ns<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_n_v_s_substrata_3x3.csv')) #mean for substrata N and S of Hudson canyon
 
 ```
 
@@ -2353,7 +2353,7 @@ plot(fprob_gam, residuals = TRUE, pch = 1, cex=0.5, shade=TRUE, shade.col="light
 **FPROB of each substrata**
 
 ```{r}
-#join with fprob
+#join with sfob
 ind.sfob <- dplyr::full_join(fprob.ind, sfob_season, by = join_by(year, season)) %>%
   dplyr::select(year, season, id, mean_cpue, mean_fprob, weighted_mean_fprob) %>%
   tidyr::drop_na()
@@ -2454,6 +2454,39 @@ ggscatter(ind.sfob, x = "mean_cpue", y = "weighted_mean_fprob",
   theme_facet()
 ```
 
+**N/S substrata**
+
+```{r}
+fprob_ns<-read.csv(here::here('data/sst_fronts/fprob_ns.csv'))
+fprob.ns<-fprob_ns[!(is.na(fprob_ns$mean_cpue)), ]
+
+# fprob by N/S Hudson Canyon
+ggplot2::ggplot(fprob.ns,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Mean SST frontal probability') +
+   stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+              label.x.npc = 10,
+               parse = TRUE, size = 5)  +
+  theme_bw() +
+  facet_wrap(~substrat) +
+  theme_facet()
+
+## Scatter plot with correlations
+ggscatter(fprob.ns, x = "mean_cpue", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean SST frontal probability") +
+  facet_wrap(~substrat) +
+  theme_facet()
+```
 
 
 
