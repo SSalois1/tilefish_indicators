@@ -82,7 +82,6 @@ catch_recruit <- cbind(recruit %>% filter(year %in% c(1998:2020)),
                          dplyr::select(ttl_sum))
 
 # loading in shape files for maps
-wd = here::here('shapefiles')
 US.areas <- st_read(here::here('shapefiles/USA.shp'), quiet = TRUE)
 canada.areas <- st_read(here::here('shapefiles/Canada.shp'), quiet = TRUE)
 bts_strata <- st_read(here::here('shapefiles/NES_BOTTOM_TRAWL_STRATA.shp'),
@@ -1050,6 +1049,7 @@ ggplot2::ggplot(df.join,
   labs(title = 'Shelf water salinity - lag 6 years') +
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
+print(paste0('correlation: ', round(cor(df.join[,2], df.join[,13]), 4)))
 
 ```
 
@@ -1165,12 +1165,52 @@ dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
   theme_bw()
 
 
-  
+df.cor = dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, GSI) %>%
+  #filter(month %in% c(3:9)) %>%  
+  filter(year>1997 & month %in% c(4:7)) %>% 
+  tidyr::drop_na()
+print(paste0('correlation: ', round(cor(df.cor[,3], df.cor[,4]), 4)))
+ 
 ```
 
 
 Should I add a lag? If so, how much? 
+From Nesslage_ea_21:
+For the Northern stock-
+From the original 49 explanatory variables, the final RF model included 10 variables: annual AMO (lagged 5–7 years); December to
+April AMO (lagged 5–7 years); station-based December to February
+NAO (lagged 3 and 4 years); PC-based December to February NAO
+(lagged 4 years), and management time block (Table 1; Figure S3).
+The final GAMM based on backward selection of variables in-
+cluded December to April AMO lagged 7 years and station-based
+December to February NAO lagged 3 and 4 years (Table 1). The
+shapes of the relationships approximated by the RF and GAMM indi-
+cate that golden tilefish landings were higher during negative AMO
+and positive NAO, with their respective lags (Figures 2 and 3). The
+largest range of the smoothed term on the y-axis corresponded with
+December to April AMO lagged 7 years (Figures 2 and 3) and this co-
+variate contributed 52.5% of the GAM R2 (Figure 4), implying AMO has the largest 
+influence on northern landings. In contrast, NAO co-variates at lags of 3 and 4
+years contributed a combined 47.5% of the GAM R2 (Figure 4).
 
+The random forest using the full dataset identified 62 significant
+variables from the original 121 explanatory variables (Table 1), including two
+versions of the AMO (annual and seasonal with each lagged 0–7 years), both 
+seasonal versions of PC-based NAO (each lagged 0–7 years), Labrador Current 
+transport indices (NE Track 191: lagged 0, 4, 9, and 10 quarters), Gulf Stream 
+index of position anomalies (lagged 0, 1, 4–10, and 12 quarters), Gulf stream 
+position indices (lagged 0–3 years), Gulf stream transport index (lagged
+0–3 years), bottom temperature anomalies (lagged 0–2, 4–7 years),
+and time block (Figure S1). The final GAMM for northern CPUE in-
+cluded four variables: annual AMO lagged 6 years, December to
+April AMO lagged 7 years, Gulf Stream index of position anomalies
+lagged 12 quarters, and the Labrador Current transport index for NE
+Track 191 unlagged (Table 1; Figure 5). Annual AMO lagged 6 years
+and December to April AMO lagged 7 years contributed a combined
+64.1% of the GAM R2(Figure 4). Gulf Stream and Labrador Current
+transport indices contributed only 19.7% and 16.2%, respectively, of
+the GAM R2(Figure 4).
 
 ```{r}
 
