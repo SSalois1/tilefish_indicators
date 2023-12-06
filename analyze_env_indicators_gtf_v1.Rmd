@@ -1706,6 +1706,228 @@ temperature at 200m (15 C) depth between 55W to 75W.
 Positive values indicate a the mean position of the GS is more Northernly, 
 whereas negative values indicate a more Southernly position. 
 
+**Test code for GSI/recruit year lags**
+
+```{r}
+gsi.m <- read.csv(here::here('data/gulf_stream_index/mm_gsi_1954_2022_chen.csv'))
+df <- dplyr::full_join(recruit, gsi.m %>%
+                   group_by(year) %>% 
+                   filter(month %in% c(3:8)) %>% 
+                   summarise(m.gsi = mean(GSI),
+                             sd.gsi = sd(GSI),
+                             max.gsi = max(GSI), 
+                             min.gsi = min(GSI)), 
+                 by = join_by(year)) %>% 
+  mutate(mean_gsi_lag1 = lag(m.gsi,1),
+         mean_gsi_lag2 = lag(m.gsi,2),
+         mean_gsi_lag3 = lag(m.gsi,3),
+         mean_gsi_lag6 = lag(m.gsi,6)) %>%
+  mutate(pos = ifelse(m.gsi > 0, 'Northerly', 'Southerly'), 
+         n.pos = ifelse(m.gsi > 0, 1, 0))
+gsi_df <- df[-c(51:69),] 
+
+## No lag
+lm_rec_gsi<-lm(m.gsi ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi)
+
+cor.test(gsi_df$recruit_est, gsi_df$m.gsi, method=c("pearson"))
+
+ggscatter(gsi_df, x = "recruit_est", y = "m.gsi", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI")
+
+#GSI GAM
+gsi_gam <- gam(m.gsi ~ s(recruit_est), data=gsi_df, method="REML")
+#gam.check(gsi_gam)
+#summary(gsi_gam)
+
+draw(gsi_gam, residuals=TRUE)
+
+## 1 year lag
+lm_rec_gsi1<-lm(mean_gsi_lag1 ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi1)
+
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag1, method=c("pearson"))
+
+ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag1", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
+          title = "GSI 1 year lag")
+
+#GSI GAM
+gsi_gam1 <- gam(mean_gsi_lag1 ~ s(recruit_est), data=gsi_df, method="REML")
+#gam.check(gsi_gam)
+#summary(gsi_gam)
+
+draw(gsi_gam1, residuals=TRUE)
+
+## 2 year lag
+lm_rec_gsi2<-lm(mean_gsi_lag2 ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi2)
+
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag2, method=c("pearson"))
+
+ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag2", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
+          title = "GSI 2 year lag")
+
+#GSI GAM
+gsi_gam2 <- gam(mean_gsi_lag2 ~ s(recruit_est), data=gsi_df, method="REML")
+#gam.check(gsi_gam)
+#summary(gsi_gam)
+
+draw(gsi_gam2, residuals=TRUE)
+
+## 3 year lag
+lm_rec_gsi3<-lm(mean_gsi_lag3 ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi3)
+
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag3, method=c("pearson"))
+
+ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag3", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
+          title = "GSI 3 year lag")
+
+#GSI GAM
+gsi_gam3 <- gam(mean_gsi_lag3 ~ s(recruit_est), data=gsi_df, method="REML")
+#gam.check(gsi_gam)
+#summary(gsi_gam)
+
+draw(gsi_gam3, residuals=TRUE)
+
+## 6 year lag
+lm_rec_gsi6<-lm(mean_gsi_lag6 ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi6)
+
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag6, method=c("pearson"))
+
+ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag6", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
+          title = "GSI 6 year lag")
+
+#GSI GAM
+gsi_gam6 <- gam(mean_gsi_lag6 ~ s(recruit_est), data=gsi_df, method="REML")
+#gam.check(gsi_gam)
+#summary(gsi_gam)
+
+draw(gsi_gam6, residuals=TRUE)
+```
+
+**CPUE/Year lags**
+```{r}
+cpue_yr<-read.csv(here::here('data/catch_data/cpue_yr.csv'))
+
+sfob_yr<- dplyr::full_join(cpue_yr, gsi.m %>%
+                   group_by(year) %>% 
+                   filter(month %in% c(3:8)) %>% 
+                   summarise(m.gsi = mean(GSI),
+                             sd.gsi = sd(GSI),
+                             max.gsi = max(GSI), 
+                             min.gsi = min(GSI)), 
+                 by = join_by(year)) %>% 
+  mutate(mean_gsi_lag1 = lag(m.gsi,1),
+         mean_gsi_lag2 = lag(m.gsi,2),
+         mean_gsi_lag3 = lag(m.gsi,3)) %>%
+  mutate(pos = ifelse(m.gsi > 0, 'Northerly', 'Southerly'), 
+         n.pos = ifelse(m.gsi > 0, 1, 0))
+gsi_yr <- sfob_yr[-c(26:69),] 
+
+## No lag
+lm_cpue_gsi<-lm(m.gsi ~ mean_cpue_yr, data=gsi_yr)
+summary(lm_cpue_gsi)
+
+cor.test(gsi_yr$mean_cpue_yr, gsi_yr$m.gsi, method=c("pearson"))
+
+ggscatter(gsi_yr, x = "mean_cpue_yr", y = "m.gsi", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly CPUE", ylab = "Mean Yearly GSI",
+          title="GSI no lag")
+
+#GSI GAM
+gsi_cpue_gam <- gam(m.gsi ~ s(mean_cpue_yr), data=gsi_yr, method="REML")
+#gam.check(gsi_gam)
+#summary(gsi_gam)
+
+draw(gsi_cpue_gam, residuals=TRUE)
+
+## 1 year lag
+lm_cpue_gsi1<-lm(mean_gsi_lag1 ~ mean_cpue_yr, data=gsi_yr)
+summary(lm_cpue_gsi1)
+
+cor.test(gsi_yr$mean_cpue_yr, gsi_yr$mean_gsi_lag1, method=c("pearson"))
+
+ggscatter(gsi_yr, x = "mean_cpue_yr", y = "mean_gsi_lag1", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly CPUE", ylab = "Mean Yearly GSI",
+          title="GSI 1 year lag")
+
+#GSI GAM
+gsi_cpue_gam1 <- gam(mean_gsi_lag1 ~ s(mean_cpue_yr), data=gsi_yr, method="REML")
+#gam.check(gsi_gam)
+#summary(gsi_gam)
+
+draw(gsi_cpue_gam1, residuals=TRUE)
+
+## 2 year lag
+lm_cpue_gsi2<-lm(mean_gsi_lag2 ~ mean_cpue_yr, data=gsi_yr)
+summary(lm_cpue_gsi2)
+
+cor.test(gsi_yr$mean_cpue_yr, gsi_yr$mean_gsi_lag2, method=c("pearson"))
+
+ggscatter(gsi_yr, x = "mean_cpue_yr", y = "mean_gsi_lag2", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly CPUE", ylab = "Mean Yearly GSI",
+          title="GSI 2 year lag")
+
+#GSI GAM
+gsi_cpue_gam2 <- gam(mean_gsi_lag2 ~ s(mean_cpue_yr), data=gsi_yr, method="REML")
+#gam.check(gsi_gam)
+#summary(gsi_gam)
+
+draw(gsi_cpue_gam2, residuals=TRUE)
+
+## 3 year lag
+lm_cpue_gsi3<-lm(mean_gsi_lag3 ~ mean_cpue_yr, data=gsi_yr)
+summary(lm_cpue_gsi3)
+
+cor.test(gsi_yr$mean_cpue_yr, gsi_yr$mean_gsi_lag3, method=c("pearson"))
+
+ggscatter(gsi_yr, x = "mean_cpue_yr", y = "mean_gsi_lag3", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly CPUE", ylab = "Mean Yearly GSI",
+          title="GSI 3 year lag")
+
+#GSI GAM
+gsi_cpue_gam3 <- gam(mean_gsi_lag3 ~ s(mean_cpue_yr), data=gsi_yr, method="REML")
+#gam.check(gsi_gam)
+#summary(gsi_gam)
+
+draw(gsi_cpue_gam3, residuals=TRUE)
+
+```
+
+
 ```{r}
 #gsi.m <- read.csv(here::here('C:/Users/stephanie.owen/Documents/tilefish_indicators/gulf_stream_index/mm_gsi_1954_2022_chen.csv'))
 
@@ -1721,7 +1943,7 @@ whereas negative values indicate a more Southernly position.
 #write.csv(gsi.sfob, "C:/Users/stephanie.owen/Documents/tilefish_indicators/gulf_stream_index/gsi_sfob.csv", row.names=FALSE)
 
 #new df wouldn't recognize month when joining the gsi and sfob data so I did it manually 
-gsi <- read.csv(here::here('C:/Users/stephanie.owen/Documents/tilefish_indicators/gulf_stream_index/gsi_sfob.csv'))
+gsi <- read.csv(here::here('C:/Users/stephanie.owen/Documents/tilefish_indicators/data/gulf_stream_index/gsi_sfob.csv'))
 
 gsi_nozero <- filter(gsi, mean_cpue > 0)
 
@@ -2446,6 +2668,7 @@ ggplot2::ggplot(ind.sfob %>% filter(season == "fall") ,
   theme_facet()
 
 ## Scatter plot with correlations
+#plot cuts off p values unless you open it in a new window and save 
 ggscatter(ind.sfob, x = "mean_cpue", y = "weighted_mean_fprob", 
           add = "reg.line", conf.int = TRUE,
           cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
@@ -2454,6 +2677,7 @@ ggscatter(ind.sfob, x = "mean_cpue", y = "weighted_mean_fprob",
           xlab = "Mean CPUE/hr", ylab = "Mean SST frontal probability") +
   facet_wrap(~id) +
   theme_facet()
+
 ```
 
 **N/S substrata**
