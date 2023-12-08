@@ -35,6 +35,9 @@ library(ggpubr)
 library(wesanderson)
 library(raster)
 #library(glmTMB)
+library(ggpmisc)
+library(mgcViz)
+library(gratia)
 
 # CPUE data (no env covariates)
 gt_data_model_cpue <- read.csv(here::here('data/catch_data/gt_data_model_cpue.csv'))
@@ -575,48 +578,6 @@ ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
 
 
 ```
-
-
-
-The following figures compare in-situ bottom temperature from the study-fleet
-data set to the Study fleet and Observer tilefish catch data. 
-
-+ Note here temperatures are averaged across all depths > 50 for each month.
-
-**Stephanie I hope the code below is a good jumping off point!** 
-
-```{r}
-# Stephanie here I subset the years that are relevant to the Study fleet 
-# data set. Note that Paul suggested looking at catch that is from depths 
-# greater than 50 m and only from small mesh gear. The object sfob.env is
-# already filtered for just small gear (see line 57 above).
-
-
-# You can run this line just to check. 
-unique(sfob.env$mesh_bin)
-
-# the lines that create the df.lag object selects  depths > 50, just note 
-# that there are many depths here, so this is taking the average temperature
-# across all depths. We may want to think a bit more about how we want to 
-# subset for averaging (or not?)
-
-# here is a way to see what depths are reported 
-sort(unique(sfob.env$depth))
-
-# another note - since I group by year AND month - the lags are month specific. 
-# If you wanted to lag by year only, you would have to get rid of month below.
-df.lag = sfob.env %>% filter(year > 2006 & depth > 50) %>%
-  group_by(year,month) %>% 
-  summarise(mean_dpth = mean(depth),
-            mean_bt = mean(bottomt)) %>% 
-  mutate(mean_bt_lag2 = lag(mean_bt,2),
-         mean_bt_lag3 = lag(mean_bt,3), 
-         mean_bt_lag6 = lag(mean_bt, 6))
-
-
-
-```
-
 
 
 ##### Salinity
