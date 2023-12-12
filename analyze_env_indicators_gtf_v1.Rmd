@@ -366,7 +366,7 @@ and salinity may be of interest.
 
 ```{r, c9}
 # SST
-
+sst<-read.csv(here::here('data/sst/sst_ts_gtf_strata.csv'))
 ```
 
 ##### Maps (SST) {.tabset}
@@ -379,7 +379,35 @@ and salinity may be of interest.
 
 
 ```{r}
+# SST by month with lag
+sst.lag <- sst %>%
+  mutate(mean_sst_lag2 = lag(weighted_mean_sst,2),
+         mean_sst_lag3 = lag(weighted_mean_sst,3),
+         mean_sst_lag6 = lag(weighted_mean_sst,6))
+         
+# Join with recruit estimate
+df <- dplyr::full_join(recruit, sst.lag %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(2000:2020), month %in% c(8,9)),
+dplyr::select(year, month, mean_cpue, mean_sst, weighted_mean_sst, mean_sst_lag2, mean_sst_lag3, mean_sst_lag6),
+                 by = join_by(year))
+sst.rec <- df[-c(1:29),]
 
+
+## SST no lag
+ggplot2::ggplot(sst.rec,
+                aes(x=recruit_est, y=weighted_mean_sst)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment Estimate') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Mean SST no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+print(paste0('correlation: ', round(cor(sst.rec[,2], sst.rec[,4]), 4)))
 ```
 
 
@@ -471,15 +499,15 @@ df.lag = sfob.env %>% filter(year > 2006 & depth > 50) %>%
          mean_bt_lag3 = lag(mean_bt,3), 
          mean_bt_lag6 = lag(mean_bt, 6))
 # Join in-situ bottom temps w/assessment recruitment estimate
-df.join = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
+df.join.bt = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
   dplyr::select(year, month, recruit_est, mean_dpth, 
                 mean_bt, mean_bt_lag2, mean_bt_lag3, mean_bt_lag6) %>%
   tidyr::drop_na()
 # See what months have data
-sort(unique(df.join$month))
-hist(df.join$month) # will group into spring/summer fall/winter categories
+sort(unique(df.join.bt$month))
+hist(df.join.bt$month) # will group into spring/summer fall/winter categories
 ## spring/summer bottom temp no lag
-ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
+ggplot2::ggplot(df.join.bt %>% filter(month %in% c(4,5,6,7,8)),
                 aes(x=recruit_est, y=mean_bt)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -490,7 +518,7 @@ ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## spring/summer bottom temp no lag
-ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
+ggplot2::ggplot(df.join.bt %>% filter(month %in% c(9,10,11,12)),
                 aes(x=recruit_est, y=mean_bt)) + 
   geom_point(color= 'black')+
   stat_smooth(method = "lm",
@@ -501,7 +529,7 @@ ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## spring/summer bottom temp 2 month lag
-ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
+ggplot2::ggplot(df.join.bt %>% filter(month %in% c(4,5,6,7,8)),
                 aes(x = recruit_est, y = mean_bt_lag2)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -513,7 +541,7 @@ ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## spring/summer bottom temp 2 month lag
-ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
+ggplot2::ggplot(df.join.bt %>% filter(month %in% c(9,10,11,12)),
                 aes(x = recruit_est, y = mean_bt_lag2)) + 
   geom_point(color= 'black')+
   stat_smooth(method = "lm",
@@ -525,7 +553,7 @@ ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## spring/summer bottom temp 3 month lag
-ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
+ggplot2::ggplot(df.join.bt %>% filter(month %in% c(4,5,6,7,8)),
                 aes(x = recruit_est, y = mean_bt_lag3)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -537,7 +565,7 @@ ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## spring/summer bottom temp 3 month lag
-ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
+ggplot2::ggplot(df.join.bt %>% filter(month %in% c(9,10,11,12)),
                 aes(x = recruit_est, y = mean_bt_lag3)) + 
   geom_point(color= 'black')+
   stat_smooth(method = "lm",
@@ -549,7 +577,7 @@ ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## spring/summer bottom temp 6 month lag
-ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
+ggplot2::ggplot(df.join.bt %>% filter(month %in% c(4,5,6,7,8)),
                 aes(x = recruit_est, y = mean_bt_lag6)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -561,7 +589,7 @@ ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## spring/summer bottom temp 6 month lag
-ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
+ggplot2::ggplot(df.join.bt %>% filter(month %in% c(9,10,11,12)),
                 aes(x = recruit_est, y = mean_bt_lag6)) + 
   geom_point(color= 'black')+
   stat_smooth(method = "lm",
@@ -574,9 +602,23 @@ ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
   theme_bw()
 
 
+```
 
+**Correlations**
 
+```{r}
+lm_bt<-lm(mean_bt ~ recruit_est, data=df.join.bt)
+summary(lm_bt)
+cor.test(df.join.bt$recruit_est, df.join.bt$mean_bt, method=c("pearson"))
 
+ggscatter(df.join.bt, x = "recruit_est", y = "mean_bt", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean bottom temp (°C)")
+
+#bt_gam <- gam(recruit_est ~ s(mean_bt), data=df.join.bt, method="REML")
+#draw(bt_gam, residuals=TRUE)
 ```
 
 
@@ -705,16 +747,16 @@ df.lag = shlfvol %>%
          mean_v_lag3 = lag(mean_v,3), 
          mean_v_lag6 = lag(mean_v,6))
 # Join in-situ bottom temps w/assessment recruitment estimate
-df.join = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
+df.join.shlf = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
   dplyr::select(year, month, recruit_est, mean_t, mean_s, mean_v, 
                 mean_t_lag2, mean_s_lag2, mean_v_lag2,
                 mean_t_lag3, mean_s_lag3, mean_v_lag3) %>%
   tidyr::drop_na()
 # See what months have data
-sort(unique(df.join$month))
-hist(df.join$month) # will group into spring/summer fall/winter categories
+sort(unique(df.join.shlf$month))
+hist(df.join.shlf$month) # will group into spring/summer fall/winter categories
 ## Shelf water volume no lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_v)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -727,7 +769,7 @@ ggplot2::ggplot(df.join,
   theme_bw()
 
 ## Shelf water temperature no lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_t)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -739,7 +781,7 @@ ggplot2::ggplot(df.join,
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## Shelf water salinity no lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_s)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -752,7 +794,7 @@ ggplot2::ggplot(df.join,
   theme_bw()
 
 
-ggplot2::ggplot(df.join %>% filter(year >1997 & month %in% c(7,8,9)),
+ggplot2::ggplot(df.join.shlf %>% filter(year >1997 & month %in% c(7,8,9)),
                 aes(x=recruit_est, y=mean_s)) + 
   geom_point() +
   geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
@@ -781,7 +823,7 @@ With lags
 
 ```{r}
 ## Shelf water volume 2 month lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_v_lag2)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -794,7 +836,7 @@ ggplot2::ggplot(df.join,
   theme_bw()
 
 ## Shelf water temperature  2 month lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_t_lag2)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -806,7 +848,7 @@ ggplot2::ggplot(df.join,
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## Shelf water salinity 2 month lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_s_lag2)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -825,7 +867,7 @@ ggplot2::ggplot(df.join,
 
 ```{r}
 ## Shelf water volume 3 month lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_v_lag3)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -838,7 +880,7 @@ ggplot2::ggplot(df.join,
   theme_bw()
 
 ## Shelf water temperature 3 month lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_t_lag3)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -850,7 +892,7 @@ ggplot2::ggplot(df.join,
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## Shelf water salinity 3 month lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_s_lag3)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -888,7 +930,7 @@ df.lag = shlfvol %>%
          mean_v_lag3 = lag(mean_v,3), 
          mean_v_lag6 = lag(mean_v,6))
 # Join in-situ bottom temps w/assessment recruitment estimate
-df.join = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
+df.join.shlf = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
   dplyr::select(year,recruit_est, mean_t, mean_s, mean_v, 
                 mean_t_lag2, mean_s_lag2, mean_v_lag2,
                 mean_t_lag3, mean_s_lag3, mean_v_lag3,
@@ -897,7 +939,7 @@ df.join = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
 
 ## Shelf water vol 
 
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=year, y=mean_v)) + 
   geom_point(color = 'black') +
   geom_line(color = 'black') +
@@ -907,8 +949,8 @@ ggplot2::ggplot(df.join,
   theme_bw()
 
 ggplot2::ggplot() + 
-  geom_line(data = df.join, aes(x=year, y=mean_s), color = 'red') +
-  geom_line(data = df.join,aes(x=year, y=mean_t*1), color = 'blue') +
+  geom_line(data = df.join.shlf, aes(x=year, y=mean_s), color = 'red') +
+  geom_line(data = df.join.shlf,aes(x=year, y=mean_t*1), color = 'blue') +
   ylim(30.0,34.0) +
   scale_y_continuous(name = 'Sh.Water Salinity', 
                       sec.axis = sec_axis(~./1, name = 'Sh.Water Temperature')) + 
@@ -917,7 +959,7 @@ ggplot2::ggplot() +
   theme_bw()
 
 ggplot2::ggplot() + 
-  geom_line(data = df.join, aes(x=year, y=mean_s), color = 'red') +
+  geom_line(data = df.join.shlf, aes(x=year, y=mean_s), color = 'red') +
   xlab('Year') +
   ylab('Mean shelf water salinity') +
   labs(title = 'Shelf water salinity') +
@@ -925,7 +967,7 @@ ggplot2::ggplot() +
 
 ## Shelf water vol no lag
 
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_v)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -939,7 +981,7 @@ ggplot2::ggplot(df.join,
 
 
 ## Shelf water temperature no lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_t)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -951,7 +993,7 @@ ggplot2::ggplot(df.join,
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## Shelf water salinity no lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_s)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -972,7 +1014,7 @@ With lags
 
 ## Shelf water vol 6 yr lag
 
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_v_lag6)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -986,7 +1028,7 @@ ggplot2::ggplot(df.join,
 
 
 ## Shelf water temperature 6 yr lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_t_lag6)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -999,7 +1041,7 @@ ggplot2::ggplot(df.join,
   theme_bw()
 
 ## Shelf water salinity 6 yr lag
-ggplot2::ggplot(df.join,
+ggplot2::ggplot(df.join.shlf,
                 aes(x=recruit_est, y=mean_s_lag6)) + 
   geom_point(color = 'black') +
   stat_smooth(method = "lm",
@@ -1010,8 +1052,55 @@ ggplot2::ggplot(df.join,
   labs(title = 'Shelf water salinity - lag 6 years') +
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
-print(paste0('correlation: ', round(cor(df.join[,2], df.join[,13]), 4)))
+print(paste0('correlation: ', round(cor(df.join.shlf[,2], df.join.shlf[,13]), 4)))
 
+```
+
+**Correlations**
+
+```{r}
+
+## shelf water volume
+lm_shlfvol<-lm(mean_v ~ recruit_est, data=df.join.shlf)
+summary(lm_shlfvol)
+cor.test(df.join.shlf$recruit_est, df.join.shlf$mean_v, method=c("pearson"))
+
+ggscatter(df.join.shlf, x = "recruit_est", y = "mean_v", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean shelf water volume")
+
+#shlfvol_gam <- gam(recruit_est ~ s(mean_v), data=df.join.shlf, method="REML")
+#draw(shlfvol_gam, residuals=TRUE)
+
+## shelf water temperature
+lm_shlftemp<-lm(mean_t ~ recruit_est, data=df.join.shlf)
+summary(lm_shlftemp)
+cor.test(df.join.shlf$recruit_est, df.join.shlf$mean_t, method=c("pearson"))
+
+ggscatter(df.join.shlf, x = "recruit_est", y = "mean_t", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean shelf water temperature")
+
+#shlftemp_gam <- gam(recruit_est ~ s(mean_t), data=df.join.shlf, method="REML")
+#draw(shlftemp_gam, residuals=TRUE)
+
+## shelf water salinity
+lm_shlfsal<-lm(mean_s ~ recruit_est, data=df.join.shlf)
+summary(lm_shlfsal)
+cor.test(df.join.shlf$recruit_est, df.join.shlf$mean_s, method=c("pearson"))
+
+ggscatter(df.join.shlf, x = "recruit_est", y = "mean_s", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean shelf water salinity")
+
+shlfsal_gam <- gam(recruit_est ~ s(mean_s, k=5), data=df.join.shlf, sp=0.01)
+draw(shlfsal_gam, residuals=TRUE)
 ```
 
 
@@ -1124,15 +1213,31 @@ dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
   labs(title = 'Gulf stream index (Apr:Jul)') +
   geom_hline(yintercept = 0, lty = 2) +
   theme_bw()
+ 
+```
 
+**Correlations**
 
+```{r}
 df.cor = dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
   dplyr::select(year, month, recruit_est, GSI) %>%
   #filter(month %in% c(3:9)) %>%  
   filter(year>1997 & month %in% c(4:7)) %>% 
   tidyr::drop_na()
 print(paste0('correlation: ', round(cor(df.cor[,3], df.cor[,4]), 4)))
- 
+
+lm_gsi<-lm(GSI ~ recruit_est, data=df.cor)
+summary(lm_gsi)
+cor.test(df.cor$recruit_est, df.cor$GSI, method=c("pearson"))
+
+ggscatter(df.cor, x = "recruit_est", y = "GSI", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Gulf Stream Position Anomaly")
+
+gsi_gam <- gam(recruit_est ~ s(GSI, k=5), data=df.cor, sp=0.01)
+draw(gsi_gam, residuals=TRUE)
 ```
 
 
@@ -1234,19 +1339,10 @@ tt = dplyr::full_join(recruit, gsi.m %>%
                               'Loess'='red', 'Gam' = 'green',
                               'Gam2' = 'purple')) +
   theme_bw()
-
-
-
-
-
-
 ```
 
 
 ```{r}
-
-
-
 ggplot(data = df, # add the data
        aes(x = year, y = m.gsi, # set x, y coordinates
            color = pos)) +    # color by GS position
@@ -1435,6 +1531,9 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 
 
 ##### Microplankton
+```{r}
+micro<-read.csv(here::here('data/phyto_size_class/microplankton_ts_gtf_strata.csv'))
+```
 
 
 ##### Microplankton maps {.tabset}
@@ -1458,7 +1557,7 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 ```{r}
 
 # CHL-A
-
+chl<-read.csv(here::here('data/chl/chl_ts_gtf_strata.csv'))
 ```
 
 ##### Maps (Chlorophyll-A) {.tabset}
@@ -1483,7 +1582,9 @@ ggscatter(df.adt, x = 'recruit_est', y = 'value',
 
 ```{r}
 # SST fronts
-
+fprob<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_3x3.csv')) #fprob across all individual strata
+fprob.ind<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_indv_substrata_3x3.csv')) #mean for each of 14 substrata
+fprob.ns<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_n_v_s_substrata_3x3.csv')) #mean for substrata N and S of Hudson canyon
 ```
 
 ##### Maps (SST fronts) {.tabset}
