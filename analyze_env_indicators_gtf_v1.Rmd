@@ -389,8 +389,8 @@ sst.lag <- sst %>%
          mean_sst_lag3 = lag(weighted_mean_sst,3),
          mean_sst_lag6 = lag(weighted_mean_sst,6))
 
-# filter sfob.env 
-sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0) %>%
+# filter sfob.env - removes 2002 outlier
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr >0, cpue_hr < 20) %>%
   group_by(year,month) %>% 
   summarise(mean_cpue = mean(cpue_hr)) 
          
@@ -398,6 +398,7 @@ sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0) %>%
 sst.sfob <- dplyr::full_join(sst.lag, sfob, by = join_by(year, month)) %>%
   dplyr::select(year, month, mean_cpue, mean_sst, weighted_mean_sst, mean_sst_lag2, mean_sst_lag3, mean_sst_lag6) %>%
   tidyr::drop_na()
+
 
 
 ## SST no lag
@@ -485,7 +486,7 @@ ggplot2::ggplot(sst.sfob,
 lm_sst<-lm(weighted_mean_sst ~ mean_cpue, data=sst.sfob)
 summary(lm_sst)
 
-plot(weighted_mean_sst ~ mean_cpue, data=sst.sfob, pch=1, col="dodgerblue") + abline(lm_sst)
+#plot(weighted_mean_sst ~ mean_cpue, data=sst.sfob, pch=1, col="dodgerblue") + abline(lm_sst)
 
 cor.test(sst.sfob$mean_cpue, sst.sfob$weighted_mean_sst, method=c("pearson"))
 ggscatter(sst.sfob, x = "mean_cpue", y = "weighted_mean_sst", 
@@ -495,11 +496,11 @@ ggscatter(sst.sfob, x = "mean_cpue", y = "weighted_mean_sst",
           xlab = "Mean CPUE/hr", ylab = "Weighted Mean SST")
 
 # GAM
-sst_gam <- gam(mean_cpue ~ s(weighted_mean_sst), data=sst.sfob, method="REML")
+#sst_gam <- gam(mean_cpue ~ s(weighted_mean_sst), data=sst.sfob, method="REML")
 #gam.check(sst_gam)
 #summary(sst_gam)
 
-draw(sst_gam, residuals=TRUE)
+#draw(sst_gam, residuals=TRUE)
 ```
 
 
@@ -582,7 +583,7 @@ data set to the Study fleet and Observer tilefish catch data.
 ```{r}
 
 #filter by year, depth, cpue (includes min, max, and sd of bottomt by month)
-df.lag.cpue = sfob.env %>% filter(year > 2006 & depth > 50 & cpue_hr > 0) %>%
+df.lag.cpue = sfob.env %>% filter(year > 2006 & depth > 50 & cpue_hr > 0 & cpue_hr < 20) %>%
   group_by(year,month) %>% 
   summarise(mean_dpth = mean(depth),
             mean_bt = mean(bottomt),
@@ -770,13 +771,9 @@ cor.test(df.lag.sfob$mean_cpue, df.lag.sfob$mean_bt, method=c("pearson"))
 
 ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt", 
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
-              label.x=20, label.y=7.5),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean CPUE/hr", ylab = "Mean bottom temp (°C)")
-
-#ggqqplot(df.lag.sfob$mean_bt, ylab="Mean BT")
-#ggqqplot(df.lag.sfob$mean_cpue, ylab="Mean CPUE")
 
 
 ```
@@ -784,11 +781,11 @@ ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt",
 **SFOB insitu bottom temp GAM**
 
 ```{r}
-bt_gam <- gam(mean_cpue ~ s(mean_bt), data=df.lag.sfob, method="REML")
+#bt_gam <- gam(mean_cpue ~ s(mean_bt), data=df.lag.sfob, method="REML")
 #gam.check(bt_gam)
 #summary(bt_gam)
 
-draw(bt_gam, residuals=TRUE)
+#draw(bt_gam, residuals=TRUE)
 
 ```
 
@@ -908,7 +905,8 @@ shlfvol <- shlfvol %>% mutate(date_= as.Date(Year.Day-1,
 ```{r}
 # Create shw vol by month w/lag
 df.lag = shlfvol %>%
-  group_by(year,month) %>% 
+  filter(year > 1997) %>%
+  group_by(year,month) %>%
   summarise(mean_t = mean(ShW.T),
             mean_s = mean(ShW.S),
             mean_v = mean(ShW.Vol)) %>% 
@@ -920,7 +918,7 @@ df.lag = shlfvol %>%
          mean_v_lag3 = lag(mean_v,3))
 
 #filter sfob.env 
-shlfvol.sfob = sfob.env %>% filter(depth > 50, cpue_hr > 0) %>%
+shlfvol.sfob = sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<20) %>%
   group_by(year,month) %>% 
   summarise(mean_dpth = mean(depth),
             mean_bt = mean(bottomt),
@@ -1213,7 +1211,7 @@ ggplot2::ggplot(df.shlfvol.sfob,
 ```{r}
 lm_shlf<-lm(mean_v ~ mean_cpue, data=df.shlfvol.sfob)
 summary(lm_shlf)
-plot(mean_v ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf)
+#plot(mean_v ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf)
 
 cor.test(df.shlfvol.sfob$mean_cpue, df.shlfvol.sfob$mean_v, method=c("pearson"))
 
@@ -1226,7 +1224,7 @@ ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_v",
 # shelf water temperature
 lm_shlf_t<-lm(mean_t ~ mean_cpue, data=df.shlfvol.sfob)
 summary(lm_shlf_t)
-plot(mean_t ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf_t)
+#plot(mean_t ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf_t)
 
 cor.test(df.shlfvol.sfob$mean_cpue, df.shlfvol.sfob$mean_t, method=c("pearson"))
 
@@ -1239,7 +1237,7 @@ ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_t",
 # shelf water salinity
 lm_shlf_s<-lm(mean_s ~ mean_cpue, data=df.shlfvol.sfob)
 summary(lm_shlf_s)
-plot(mean_s ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf_s)
+#plot(mean_s ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf_s)
 
 cor.test(df.shlfvol.sfob$mean_cpue, df.shlfvol.sfob$mean_s, method=c("pearson"))
 
@@ -1255,11 +1253,11 @@ ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_s",
 
 ```{r}
 #shelf vol GAM
-shlfvol_gam <- gam(mean_cpue ~ s(mean_v), data=df.shlfvol.sfob, method="REML")
+#shlfvol_gam <- gam(mean_cpue ~ s(mean_v), data=df.shlfvol.sfob, method="REML")
 #gam.check(shlfvol_gam)
 #summary(shlfvol_gam)
 
-draw(shlfvol_gam, residuals=TRUE)
+#draw(shlfvol_gam, residuals=TRUE)
 
 ```
 
@@ -1288,7 +1286,8 @@ df <- dplyr::full_join(recruit, gsi.m %>%
   mutate(mean_gsi_lag1 = lag(m.gsi,1),
          mean_gsi_lag2 = lag(m.gsi,2),
          mean_gsi_lag3 = lag(m.gsi,3),
-         mean_gsi_lag6 = lag(m.gsi,6)) %>%
+         mean_gsi_lag5 = lag(m.gsi,5),
+         mean_gsi_lag7 = lag(m.gsi,7)) %>%
   mutate(pos = ifelse(m.gsi > 0, 'Northerly', 'Southerly'), 
          n.pos = ifelse(m.gsi > 0, 1, 0))
 gsi_df <- df[-c(51:69),] 
@@ -1305,12 +1304,6 @@ ggscatter(gsi_df, x = "recruit_est", y = "m.gsi",
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Recruitment estimate", ylab = "Mean Yearly GSI")
 
-#GSI GAM
-gsi_gam <- gam(recruit_est ~ s(m.gsi), data=gsi_df, method="REML")
-#gam.check(gsi_gam)
-#summary(gsi_gam)
-
-draw(gsi_gam, residuals=TRUE)
 
 ## 1 year lag
 lm_rec_gsi1<-lm(mean_gsi_lag1 ~ recruit_est, data=gsi_df)
@@ -1325,12 +1318,6 @@ ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag1",
           xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
           title = "GSI 1 year lag")
 
-#GSI GAM
-gsi_gam1 <- gam(recruit_est ~ s(mean_gsi_lag1), data=gsi_df, method="REML")
-#gam.check(gsi_gam)
-#summary(gsi_gam)
-
-draw(gsi_gam1, residuals=TRUE)
 
 ## 2 year lag
 lm_rec_gsi2<-lm(recruit_est ~ mean_gsi_lag2, data=gsi_df)
@@ -1345,13 +1332,6 @@ ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag2",
           xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
           title = "GSI 2 year lag")
 
-#GSI GAM
-gsi_gam2 <- gam(recruit_est ~ s(mean_gsi_lag2), data=gsi_df, method="REML")
-#gam.check(gsi_gam)
-#summary(gsi_gam)
-
-draw(gsi_gam2, residuals=TRUE)
-
 ## 3 year lag
 lm_rec_gsi3<-lm(mean_gsi_lag3 ~ recruit_est, data=gsi_df)
 summary(lm_rec_gsi3)
@@ -1365,32 +1345,33 @@ ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag3",
           xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
           title = "GSI 3 year lag")
 
-#GSI GAM
-gsi_gam3 <- gam(recruit_est ~ s(mean_gsi_lag3), data=gsi_df, method="REML")
-#gam.check(gsi_gam)
-#summary(gsi_gam)
 
-draw(gsi_gam3, residuals=TRUE)
+## 5 year lag
+lm_rec_gsi5<-lm(mean_gsi_lag5 ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi5)
 
-## 6 year lag
-lm_rec_gsi6<-lm(mean_gsi_lag6 ~ recruit_est, data=gsi_df)
-summary(lm_rec_gsi6)
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag5, method=c("pearson"))
 
-cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag6, method=c("pearson"))
-
-ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag6", 
+ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag5", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
-          title = "GSI 6 year lag")
+          title = "GSI 5 year lag")
 
-#GSI GAM
-gsi_gam6 <- gam(recruit_est ~ s(mean_gsi_lag6), data=gsi_df, method="REML")
-#gam.check(gsi_gam)
-#summary(gsi_gam)
+## 7 year lag
+lm_rec_gsi7<-lm(mean_gsi_lag7 ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi7)
 
-draw(gsi_gam6, residuals=TRUE)
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag7, method=c("pearson"))
+
+ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag7", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
+          title = "GSI 7 year lag")
+
 ```
 
 **CPUE/Year lags**
@@ -1423,12 +1404,6 @@ ggscatter(gsi_yr, x = "ttl_sum", y = "m.gsi",
           xlab = "Total CPUE/yr", ylab = "Mean Yearly GSI",
           title="GSI no lag")
 
-#GSI GAM
-gsi_cpue_gam <- gam(ttl_sum ~ s(m.gsi), data=gsi_yr, method="REML")
-#gam.check(gsi_gam)
-#summary(gsi_gam)
-
-draw(gsi_cpue_gam, residuals=TRUE)
 
 ## 1 year lag
 lm_cpue_gsi1<-lm(mean_gsi_lag1 ~ ttl_sum, data=gsi_yr)
@@ -1443,12 +1418,6 @@ ggscatter(gsi_yr, x = "ttl_sum", y = "mean_gsi_lag1",
           xlab = "Total CPUE/yr", ylab = "Mean Yearly GSI",
           title="GSI 1 year lag")
 
-#GSI GAM
-gsi_cpue_gam1 <- gam(ttl_sum ~ s(mean_gsi_lag1), data=gsi_yr, method="REML")
-#gam.check(gsi_gam)
-#summary(gsi_gam)
-
-draw(gsi_cpue_gam1, residuals=TRUE)
 
 ## 2 year lag
 lm_cpue_gsi2<-lm(mean_gsi_lag2 ~ ttl_sum, data=gsi_yr)
@@ -1463,12 +1432,6 @@ ggscatter(gsi_yr, x = "ttl_sum", y = "mean_gsi_lag2",
           xlab = "Total CPUE/yr", ylab = "Mean Yearly GSI",
           title="GSI 2 year lag")
 
-#GSI GAM
-gsi_cpue_gam2 <- gam(ttl_sum ~ s(mean_gsi_lag2), data=gsi_yr, method="REML")
-#gam.check(gsi_gam)
-#summary(gsi_gam)
-
-draw(gsi_cpue_gam2, residuals=TRUE)
 
 ## 3 year lag
 lm_cpue_gsi3<-lm(mean_gsi_lag3 ~ ttl_sum, data=gsi_yr)
@@ -1483,12 +1446,6 @@ ggscatter(gsi_yr, x = "ttl_sum", y = "mean_gsi_lag3",
           xlab = "Total CPUE/yr", ylab = "Mean Yearly GSI",
           title="GSI 3 year lag")
 
-#GSI GAM
-gsi_cpue_gam3 <- gam(ttl_sum ~ s(mean_gsi_lag3), data=gsi_yr, method="REML")
-#gam.check(gsi_gam)
-#summary(gsi_gam)
-
-draw(gsi_cpue_gam3, residuals=TRUE)
 
 ```
 
@@ -1510,7 +1467,7 @@ draw(gsi_cpue_gam3, residuals=TRUE)
 #new df wouldn't recognize month when joining the gsi and sfob data so I did it manually 
 gsi <- read.csv(here::here('C:/Users/stephanie.owen/Documents/tilefish_indicators/data/gulf_stream_index/gsi_sfob.csv'))
 
-gsi_nozero <- filter(gsi, mean_cpue > 0)
+gsi_nozero <- filter(gsi, mean_cpue > 0, mean_cpue<20) #removes outlier
 
 gsi.sfob<-mutate(gsi_nozero, pos = ifelse(GSI > 0, 'Northerly', 'Southerly'), 
          n.pos = ifelse(GSI > 0, 1, 0))
@@ -1601,7 +1558,7 @@ ggplot(data = gsi.sfob,
 #correlations gsi and cpue
 lm_gsi<-lm(GSI ~ mean_cpue, data=gsi.sfob)
 summary(lm_gsi)
-plot(GSI ~ mean_cpue, data=gsi.sfob, pch=1, col="dodgerblue") + abline(lm_gsi)
+#plot(GSI ~ mean_cpue, data=gsi.sfob, pch=1, col="dodgerblue") + abline(lm_gsi)
 
 cor.test(gsi.sfob$mean_cpue, gsi.sfob$GSI, method=c("pearson"))
 
@@ -1612,11 +1569,11 @@ ggscatter(gsi.sfob, x = "mean_cpue", y = "GSI",
           xlab = "Mean CPUE/hr", ylab = "Mean Monthly GSI")
 
 #GSI GAM
-gsi_gam <- gam(mean_cpue ~ s(GSI), data=gsi.sfob, method="REML")
+#gsi_gam <- gam(mean_cpue ~ s(GSI), data=gsi.sfob, method="REML")
 #gam.check(gsi_gam)
 #summary(gsi_gam)
 
-draw(gsi_gam, residuals=TRUE)
+#draw(gsi_gam, residuals=TRUE)
 ```
 
 #### Food availablity 
@@ -1656,7 +1613,7 @@ micro.lag <- micro %>%
          mean_micro_lag6 = lag(weighted_mean_micro,6))
 
 # filter sfob.env 
-sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0) %>%
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<20) %>%
   group_by(year,month) %>% 
   summarise(mean_cpue = mean(cpue_hr)) 
          
@@ -1751,7 +1708,7 @@ ggplot2::ggplot(micro.sfob,
 lm_micro<-lm(weighted_mean_micro ~ mean_cpue, data=micro.sfob)
 summary(lm_micro)
 
-plot(weighted_mean_micro ~ mean_cpue, data=micro.sfob, pch=1, col="dodgerblue") + abline(lm_micro)
+#plot(weighted_mean_micro ~ mean_cpue, data=micro.sfob, pch=1, col="dodgerblue") + abline(lm_micro)
 
 cor.test(micro.sfob$mean_cpue, micro.sfob$weighted_mean_micro, method=c("pearson"))
 ggscatter(micro.sfob, x = "mean_cpue", y = "weighted_mean_micro", 
@@ -1761,11 +1718,11 @@ ggscatter(micro.sfob, x = "mean_cpue", y = "weighted_mean_micro",
           xlab = "Mean CPUE/hr", ylab = "Weighted Mean Microplankton")
 
 # GAM
-micro_gam <- gam(mean_cpue ~ s(weighted_mean_micro), data=micro.sfob, method="REML")
+#micro_gam <- gam(mean_cpue ~ s(weighted_mean_micro), data=micro.sfob, method="REML")
 #gam.check(micro_gam)
 #summary(micro_gam)
 
-draw(micro_gam, residuals=TRUE)
+#draw(micro_gam, residuals=TRUE)
 ```
 
 
@@ -1793,7 +1750,7 @@ chl.lag <- chl %>%
          mean_chl_lag6 = lag(weighted_mean_chl,6))
 
 # filter sfob.env 
-sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0) %>%
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<20) %>%
   group_by(year,month) %>% 
   summarise(mean_cpue = mean(cpue_hr)) 
          
@@ -1888,7 +1845,7 @@ ggplot2::ggplot(chl.sfob,
 lm_chl<-lm(weighted_mean_chl ~ mean_cpue, data=chl.sfob)
 summary(lm_chl)
 
-plot(weighted_mean_chl ~ mean_cpue, data=chl.sfob, pch=1, col="dodgerblue") + abline(lm_chl)
+#plot(weighted_mean_chl ~ mean_cpue, data=chl.sfob, pch=1, col="dodgerblue") + abline(lm_chl)
 
 cor.test(chl.sfob$mean_cpue, chl.sfob$weighted_mean_chl, method=c("pearson"))
 ggscatter(chl.sfob, x = "mean_cpue", y = "weighted_mean_chl", 
@@ -1900,11 +1857,11 @@ ggscatter(chl.sfob, x = "mean_cpue", y = "weighted_mean_chl",
 **CHL-a GAM**
 
 ```{r}
-chl_gam <- gam(mean_cpue ~ s(weighted_mean_chl), data=chl.sfob, method="REML")
+#chl_gam <- gam(mean_cpue ~ s(weighted_mean_chl), data=chl.sfob, method="REML")
 #gam.check(chl_gam)
 #summary(chl_gam)
 
-draw(chl_gam, residuals=TRUE)
+#draw(chl_gam, residuals=TRUE)
 ```
 
 
@@ -1931,6 +1888,9 @@ fprob.ns<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_n_v_s_subst
 ```{r}
 #sfob by season
 sfob_season<-read.csv(here::here('data/sst_fronts/sfob_byseason.csv'))
+
+sfob_season <- sfob_season %>% filter (mean_cpue<30) #removes outlier
+
          
 #join with fprob
 fprob.sfob <- dplyr::full_join(fprob, sfob_season, by = join_by(year, season)) %>%
@@ -2006,7 +1966,7 @@ ggplot2::ggplot(fprob.sfob %>% filter(season == "fall"),
 lm_fprob<-lm(mean_cpue ~ weighted_mean_fprob, data=fprob.sfob)
 summary(lm_fprob)
 
-plot(weighted_mean_fprob ~ mean_cpue, data=fprob.sfob, pch=1, col="dodgerblue") + abline(lm_fprob)
+#plot(weighted_mean_fprob ~ mean_cpue, data=fprob.sfob, pch=1, col="dodgerblue") + abline(lm_fprob)
 
 cor.test(fprob.sfob$mean_cpue, fprob.sfob$weighted_mean_fprob, method=c("pearson"))
 ggscatter(fprob.sfob, x = "mean_cpue", y = "weighted_mean_fprob", 
@@ -2015,11 +1975,11 @@ ggscatter(fprob.sfob, x = "mean_cpue", y = "weighted_mean_fprob",
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean CPUE/hr", ylab = "Mean Seasonal SST Frontal probability")
 
-fprob_gam <- gam(mean_cpue ~ s(weighted_mean_fprob), data=fprob.sfob, method="REML")
+#fprob_gam <- gam(mean_cpue ~ s(weighted_mean_fprob), data=fprob.sfob, method="REML")
 #gam.check(fprob_gam)
 #summary(fprob_gam)
 
-draw(fprob_gam, residuals=TRUE)
+#draw(fprob_gam, residuals=TRUE)
 
 ```
 
@@ -2162,6 +2122,41 @@ ggscatter(fprob.ns, x = "mean_cpue", y = "weighted_mean_fprob",
   facet_wrap(~substrat) +
   theme_facet()
 ```
+
+##### Multivariable GAMs
+
+```{r}
+## habitat (sst/bt/sal?)
+habitat <- dplyr::full_join(sst.sfob, df.lag.cpue, by = join_by(year, month, mean_cpue)) %>%
+  dplyr::select(year, month, mean_cpue, weighted_mean_sst, mean_bt)
+
+
+habitat.gam <- gam(mean_cpue ~ s(weighted_mean_sst, k=10) + s(mean_bt, k=10), data=habitat, method="REML")
+plot(habitat.gam)
+
+## currents (shelf vol./GSI)
+currents <- dplyr::full_join(df.shlfvol.sfob, gsi.sfob, by = join_by(year, month, mean_cpue)) %>%
+  dplyr::select(year, month, mean_cpue, mean_v, GSI)
+
+currents1 <- read.csv(here::here('data/currents.csv')) #cleaned up
+
+currents.gam <- gam(mean_cpue ~ s(mean_v, k=10) + s(GSI, k=10), data=currents1, method="REML")
+plot(currents.gam)
+
+## food availability
+food <- dplyr::full_join(micro.sfob, chl.sfob, by = join_by(year, month, mean_cpue)) %>%
+  dplyr::select(year, month, mean_cpue, weighted_mean_micro, weighted_mean_chl)
+#join micro and chl
+
+#fprob is by season, added to food csv
+
+food1 <- read.csv(here::here('data/food.csv')) #fprob is by season, added to food csv
+
+food.gam <- gam(mean_cpue ~ s(weighted_mean_micro, k=10) + s(weighted_mean_chl, k=10) + s(weighted_mean_fprob, k=10), data=food1, method="REML")
+
+plot(food.gam)
+```
+
 
 
 
