@@ -773,6 +773,7 @@ for (i in 1:nrow(shlfvol)){
   yrs[i] <- strsplit(shlfvol$Year, ".", fixed = TRUE)[[i]][1]
 }
 shlfvol$year <- yrs
+
 shlfvol <- shlfvol %>% mutate(date_= as.Date(Year.Day-1, 
                                              origin=paste0(year, "-01-01")), 
                               month= strftime(date_, "%m"), 
@@ -1113,7 +1114,7 @@ df.join.shlf = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
   dplyr::select(year, month, recruit_est, mean_t, mean_s, mean_v) %>%
   tidyr::drop_na() #removing lags to visualize all months
  
-df.lag1 = mutate(df.join.shlf, mean_v_lag1 = lag(mean_v,12)) #creating one year lag
+df.join.shlf = mutate(df.join.shlf, mean_v_lag1 = lag(mean_v,12)) #creating one year lag
 
 #by season 
 shlfvol_winter <- filter(df.join.shlf, month %in% c(1,2,3))
@@ -1121,12 +1122,12 @@ shlfvol_spring <- filter(df.join.shlf, month %in% c(4,5,6))
 shlfvol_summer <- filter(df.join.shlf, month %in% c(7,8,9))
 shlfvol_fall <- filter(df.join.shlf, month %in% c(10,11,12))
 
-## shelf water volume - one year lag
-lm_lag<-lm(mean_v_lag1 ~ recruit_est, data=df.lag1)
+## shelf water volume - one year lag (summer = peak spawn)
+lm_lag<-lm(mean_v_lag1 ~ recruit_est, data=shlfvol_summer)
 summary(lm_lag)
-cor.test(df.lag1$recruit_est, df.lag1$mean_v_lag1, method=c("pearson"))
+cor.test(shlfvol_summer$recruit_est, shlfvol_summer$mean_v_lag1, method=c("pearson"))
 
-ggscatter(df.lag1, x = "recruit_est", y = "mean_v_lag1", 
+ggscatter(shlfvol_summer, x = "recruit_est", y = "mean_v_lag1", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
@@ -1335,11 +1336,11 @@ gsi_summer <- filter(df.gsi, month %in% c(7,8,9))
 gsi_fall <- filter(df.gsi, month %in% c(10,11,12))
 
 ## GSI - one year lag
-lm_lag<-lm(gsi_lag1 ~ recruit_est, data=df.gsi)
+lm_lag<-lm(gsi_lag1 ~ recruit_est, data=gsi_summer)
 summary(lm_lag)
-cor.test(df.gsi$recruit_est, df.gsi$gsi_lag1, method=c("pearson"))
+cor.test(gsi_summer$recruit_est, gsi_summer$gsi_lag1, method=c("pearson"))
 
-ggscatter(df.gsi, x = "recruit_est", y = "gsi_lag1", 
+ggscatter(gsi_summer, x = "recruit_est", y = "gsi_lag1", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
@@ -1706,6 +1707,92 @@ micro<-read.csv(here::here('data/phyto_size_class/microplankton_ts_gtf_strata.cs
 
 ```{r}
 # Microplankton
+
+# micro with year lag
+micro.lag <- micro %>%
+  mutate(micro_lag1 = lag(weighted_mean_micro,12))
+         
+# Join with recruit estimate
+micro.rec <- dplyr::full_join(recruit, micro.lag %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(1998:2020)),
+dplyr::select(year, month, mean_cpue, mean_micro, weighted_mean_micro, micro_lag1),
+                 by = join_by(year))
+micro.rec <- micro.rec[-c(1:27),] #removes year < 1998 (starting year for analysis)
+
+#by season
+micro_winter <- filter(micro.rec, month %in% c(1,2,3))
+micro_winter <- micro_winter[-c(18),] # removes outlier
+
+micro_spring <- filter(micro.rec, month %in% c(4,5,6))
+micro_spring <- micro_spring[-c(7),]
+
+micro_summer <- filter(micro.rec, month %in% c(7,8,9))
+micro_summer <- micro_summer[-c(17),] #removes outlier
+
+micro_fall <- filter(micro.rec, month %in% c(10,11,12))
+micro_fall <- micro_fall[-c(62),] #removes outlier
+
+## One year lag - Summer (peak spawn)
+lm_lag<-lm(micro_lag1 ~ recruit_est, data=micro_summer)
+summary(lm_lag)
+cor.test(micro_summer$recruit_est, micro_summer$micro_lag1, method=c("pearson"))
+
+ggscatter(micro_summer, x = "recruit_est", y = "micro_lag1", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Summer Weighted Mean Microplankton",
+          title="One Year Lag")
+
+## Winter
+lm_winter<-lm(weighted_mean_micro ~ recruit_est, data=micro_winter)
+summary(lm_winter)
+cor.test(micro_winter$recruit_est, micro_winter$weighted_mean_micro, method=c("pearson"))
+
+ggscatter(micro_winter, x = "recruit_est", y = "weighted_mean_micro", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Winter Weighted Mean Microplankton",
+          title="Winter")
+
+## Spring
+lm_spring<-lm(weighted_mean_micro ~ recruit_est, data=micro_spring)
+summary(lm_spring)
+cor.test(micro_spring$recruit_est, micro_spring$weighted_mean_micro, method=c("pearson"))
+
+ggscatter(micro_spring, x = "recruit_est", y = "weighted_mean_micro", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Spring Weighted Mean Microplankton",
+          title="Spring")
+
+## Summer
+lm_summer<-lm(weighted_mean_micro ~ recruit_est, data=micro_summer)
+summary(lm_summer)
+cor.test(micro_summer$recruit_est, micro_summer$weighted_mean_micro, method=c("pearson"))
+
+ggscatter(micro_summer, x = "recruit_est", y = "weighted_mean_micro", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Summer Weighted Mean Microplankton",
+          title="Summer")
+
+## Fall
+lm_fall<-lm(weighted_mean_micro ~ recruit_est, data=micro_fall)
+summary(lm_fall)
+cor.test(micro_fall$recruit_est, micro_fall$weighted_mean_micro, method=c("pearson"))
+
+ggscatter(micro_fall, x = "recruit_est", y = "weighted_mean_micro", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Fall Weighted Mean Microplankton",
+          title="Fall")
+
 ```
 
 
