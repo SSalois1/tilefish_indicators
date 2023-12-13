@@ -1389,7 +1389,7 @@ sfob_yr<- dplyr::full_join(catch_recruit, gsi.m %>%
          mean_gsi_lag3 = lag(m.gsi,3)) %>%
   mutate(pos = ifelse(m.gsi > 0, 'Northerly', 'Southerly'), 
          n.pos = ifelse(m.gsi > 0, 1, 0))
-gsi_yr <- sfob_yr[-c(24:69),] 
+gsi_yr <- sfob_yr[-c(20:21,24:69),] #removes years not in study fleet and 2 outliers
 
 ## No lag
 lm_cpue_gsi<-lm(m.gsi ~ ttl_sum, data=gsi_yr)
