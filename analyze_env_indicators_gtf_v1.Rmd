@@ -379,35 +379,83 @@ sst<-read.csv(here::here('data/sst/sst_ts_gtf_strata.csv'))
 
 
 ```{r}
-# SST by month with lag
+# SST with year lag
 sst.lag <- sst %>%
-  mutate(mean_sst_lag2 = lag(weighted_mean_sst,2),
-         mean_sst_lag3 = lag(weighted_mean_sst,3),
-         mean_sst_lag6 = lag(weighted_mean_sst,6))
+  mutate(mean_sst_lag1 = lag(weighted_mean_sst,12))
          
 # Join with recruit estimate
 df <- dplyr::full_join(recruit, sst.lag %>%
                    group_by(year) %>% 
-                   filter(year %in% c(2000:2020), month %in% c(8,9)),
-dplyr::select(year, month, mean_cpue, mean_sst, weighted_mean_sst, mean_sst_lag2, mean_sst_lag3, mean_sst_lag6),
+                   filter(year %in% c(2000:2020)),
+dplyr::select(year, month, mean_cpue, mean_sst, weighted_mean_sst, mean_sst_lag1),
                  by = join_by(year))
-sst.rec <- df[-c(1:29),]
+sst.rec <- df[-c(1:29),] #removes year < 2000 (when SST data begins)
 
+#by season
+sst_winter <- filter(sst.rec, month %in% c(1,2,3))
+sst_spring <- filter(sst.rec, month %in% c(4,5,6))
+sst_summer <- filter(sst.rec, month %in% c(7,8,9))
+sst_fall <- filter(sst.rec, month %in% c(10,11,12))
 
-## SST no lag
-ggplot2::ggplot(sst.rec,
-                aes(x=recruit_est, y=weighted_mean_sst)) + 
-  geom_point(color = 'black') +
-  stat_smooth(method = "lm",
-              formula = y ~ x,
-              geom = "smooth") +
-  xlab('Recruitment Estimate') +
-  ylab('Weighted mean SST') +
-  labs(title = 'Mean SST no lag') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw()
+## Winter
+lm_winter<-lm(weighted_mean_sst ~ recruit_est, data=sst_winter)
+summary(lm_winter)
+cor.test(sst_winter$recruit_est, sst_winter$weighted_mean_sst, method=c("pearson"))
 
-print(paste0('correlation: ', round(cor(sst.rec[,2], sst.rec[,4]), 4)))
+ggscatter(sst_winter, x = "recruit_est", y = "weighted_mean_sst", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Winter Weighted Mean SST",
+          title="Winter")
+
+## Spring
+lm_spring<-lm(weighted_mean_sst ~ recruit_est, data=sst_spring)
+summary(lm_spring)
+cor.test(sst_spring$recruit_est, sst_spring$weighted_mean_sst, method=c("pearson"))
+
+ggscatter(sst_spring, x = "recruit_est", y = "weighted_mean_sst", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Spring Weighted Mean SST",
+          title="Spring")
+
+## Summer
+lm_summer<-lm(weighted_mean_sst ~ recruit_est, data=sst_summer)
+summary(lm_summer)
+cor.test(sst_summer$recruit_est, sst_summer$weighted_mean_sst, method=c("pearson"))
+
+ggscatter(sst_summer, x = "recruit_est", y = "weighted_mean_sst", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Summer Weighted Mean SST",
+          title="Summer")
+
+## Fall
+lm_fall<-lm(weighted_mean_sst ~ recruit_est, data=sst_fall)
+summary(lm_fall)
+cor.test(sst_fall$recruit_est, sst_fall$weighted_mean_sst, method=c("pearson"))
+
+ggscatter(sst_fall, x = "recruit_est", y = "weighted_mean_sst", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Fall Weighted Mean SST",
+          title="Fall")
+
+## One year lag - Summer (peak spawn)
+lm_lag<-lm(mean_sst_lag1 ~ recruit_est, data=sst_summer)
+summary(lm_lag)
+cor.test(sst_summer$recruit_est, sst_summer$mean_sst_lag1, method=c("pearson"))
+
+ggscatter(sst_summer, x = "recruit_est", y = "mean_sst_lag1", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Summer Weighted Mean SST",
+          title="One Year Lag")
 ```
 
 
@@ -515,9 +563,10 @@ ggplot2::ggplot(df.join.bt %>% filter(month %in% c(4,5,6,7,8)),
               geom = "smooth") +
   xlab('Recruitment estimate') +
   ylab('Mean bottom temp (°C)')+
+  labs(title = 'Spring/Summer') +
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
-## spring/summer bottom temp no lag
+## fall/winter bottom temp no lag
 ggplot2::ggplot(df.join.bt %>% filter(month %in% c(9,10,11,12)),
                 aes(x=recruit_est, y=mean_bt)) + 
   geom_point(color= 'black')+
@@ -526,6 +575,7 @@ ggplot2::ggplot(df.join.bt %>% filter(month %in% c(9,10,11,12)),
               geom = "smooth") +
   xlab('Recruitment estimate') +
   ylab('Mean bottom temp (°C)')+
+  labs(title = 'Fall/Winter') +
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ## spring/summer bottom temp 2 month lag
@@ -540,7 +590,7 @@ ggplot2::ggplot(df.join.bt %>% filter(month %in% c(4,5,6,7,8)),
   labs(title = 'Lag 2 months') +
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
-## spring/summer bottom temp 2 month lag
+## fall/winter bottom temp 2 month lag
 ggplot2::ggplot(df.join.bt %>% filter(month %in% c(9,10,11,12)),
                 aes(x = recruit_est, y = mean_bt_lag2)) + 
   geom_point(color= 'black')+
@@ -564,7 +614,7 @@ ggplot2::ggplot(df.join.bt %>% filter(month %in% c(4,5,6,7,8)),
   labs(title = 'Lag 3 months') +
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
-## spring/summer bottom temp 3 month lag
+## fall/winter bottom temp 3 month lag
 ggplot2::ggplot(df.join.bt %>% filter(month %in% c(9,10,11,12)),
                 aes(x = recruit_est, y = mean_bt_lag3)) + 
   geom_point(color= 'black')+
@@ -588,7 +638,7 @@ ggplot2::ggplot(df.join.bt %>% filter(month %in% c(4,5,6,7,8)),
   labs(title = 'Lag 6 months') +
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
-## spring/summer bottom temp 6 month lag
+## fall/winter bottom temp 6 month lag
 ggplot2::ggplot(df.join.bt %>% filter(month %in% c(9,10,11,12)),
                 aes(x = recruit_est, y = mean_bt_lag6)) + 
   geom_point(color= 'black')+
@@ -612,12 +662,12 @@ summary(lm_bt)
 cor.test(df.join.bt$recruit_est, df.join.bt$mean_bt, method=c("pearson"))
 
 ggscatter(df.join.bt, x = "recruit_est", y = "mean_bt", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
-          add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Recruitment Estimate", ylab = "Mean bottom temp (°C)")
+        add = "reg.line", conf.int = TRUE, 
+        cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+        add.params=list(color="dodgerblue", fill="lightgray"),
+        xlab = "Recruitment Estimate", ylab = "Mean bottom temp (°C)")
 
-#bt_gam <- gam(recruit_est ~ s(mean_bt), data=df.join.bt, method="REML")
+#t_gam <- gam(recruit_est ~ s(mean_bt), data=df.join.bt, method="REML")
 #draw(bt_gam, residuals=TRUE)
 ```
 
@@ -1059,20 +1109,78 @@ print(paste0('correlation: ', round(cor(df.join.shlf[,2], df.join.shlf[,13]), 4)
 **Correlations**
 
 ```{r}
+df.join.shlf = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, mean_t, mean_s, mean_v) %>%
+  tidyr::drop_na() #removing lags to visualize all months
+ 
+df.lag1 = mutate(df.join.shlf, mean_v_lag1 = lag(mean_v,12)) #creating one year lag
 
-## shelf water volume
-lm_shlfvol<-lm(mean_v ~ recruit_est, data=df.join.shlf)
-summary(lm_shlfvol)
-cor.test(df.join.shlf$recruit_est, df.join.shlf$mean_v, method=c("pearson"))
+#by season 
+shlfvol_winter <- filter(df.join.shlf, month %in% c(1,2,3))
+shlfvol_spring <- filter(df.join.shlf, month %in% c(4,5,6))
+shlfvol_summer <- filter(df.join.shlf, month %in% c(7,8,9))
+shlfvol_fall <- filter(df.join.shlf, month %in% c(10,11,12))
 
-ggscatter(df.join.shlf, x = "recruit_est", y = "mean_v", 
+## shelf water volume - one year lag
+lm_lag<-lm(mean_v_lag1 ~ recruit_est, data=df.lag1)
+summary(lm_lag)
+cor.test(df.lag1$recruit_est, df.lag1$mean_v_lag1, method=c("pearson"))
+
+ggscatter(df.lag1, x = "recruit_est", y = "mean_v_lag1", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Recruitment Estimate", ylab = "Mean shelf water volume")
+          xlab = "Recruitment Estimate", ylab = "Mean shelf water volume",
+          title="One year lag")
 
-#shlfvol_gam <- gam(recruit_est ~ s(mean_v), data=df.join.shlf, method="REML")
-#draw(shlfvol_gam, residuals=TRUE)
+## shelf water volume - winter
+lm_winter<-lm(mean_v ~ recruit_est, data=shlfvol_winter)
+summary(lm_winter)
+cor.test(shlfvol_winter$recruit_est, shlfvol_winter$mean_v, method=c("pearson"))
+
+ggscatter(shlfvol_winter, x = "recruit_est", y = "mean_v", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean shelf water volume",
+          title="Winter")
+
+## shelf water volume - spring
+lm_spring<-lm(mean_v ~ recruit_est, data=shlfvol_spring)
+summary(lm_spring)
+cor.test(shlfvol_spring$recruit_est, shlfvol_spring$mean_v, method=c("pearson"))
+
+ggscatter(shlfvol_spring, x = "recruit_est", y = "mean_v", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean shelf water volume",
+          title="spring")
+
+## shelf water volume - summer
+lm_summer<-lm(mean_v ~ recruit_est, data=shlfvol_summer)
+summary(lm_summer)
+cor.test(shlfvol_summer$recruit_est, shlfvol_summer$mean_v, method=c("pearson"))
+
+ggscatter(shlfvol_summer, x = "recruit_est", y = "mean_v", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean shelf water volume",
+          title="Summer")
+
+## shelf water volume - fall
+lm_fall<-lm(mean_v ~ recruit_est, data=shlfvol_fall)
+summary(lm_fall)
+cor.test(shlfvol_fall$recruit_est, shlfvol_fall$mean_v, method=c("pearson"))
+
+ggscatter(shlfvol_fall, x = "recruit_est", y = "mean_v", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean shelf water volume",
+          title="Fall")
+
 
 ## shelf water temperature
 lm_shlftemp<-lm(mean_t ~ recruit_est, data=df.join.shlf)
@@ -1085,9 +1193,6 @@ ggscatter(df.join.shlf, x = "recruit_est", y = "mean_t",
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Recruitment Estimate", ylab = "Mean shelf water temperature")
 
-#shlftemp_gam <- gam(recruit_est ~ s(mean_t), data=df.join.shlf, method="REML")
-#draw(shlftemp_gam, residuals=TRUE)
-
 ## shelf water salinity
 lm_shlfsal<-lm(mean_s ~ recruit_est, data=df.join.shlf)
 summary(lm_shlfsal)
@@ -1099,8 +1204,6 @@ ggscatter(df.join.shlf, x = "recruit_est", y = "mean_s",
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Recruitment Estimate", ylab = "Mean shelf water salinity")
 
-shlfsal_gam <- gam(recruit_est ~ s(mean_s, k=5), data=df.join.shlf, sp=0.01)
-draw(shlfsal_gam, residuals=TRUE)
 ```
 
 
@@ -1219,25 +1322,80 @@ dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
 **Correlations**
 
 ```{r}
-df.cor = dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+df.gsi = dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
   dplyr::select(year, month, recruit_est, GSI) %>%
-  #filter(month %in% c(3:9)) %>%  
-  filter(year>1997 & month %in% c(4:7)) %>% 
-  tidyr::drop_na()
-print(paste0('correlation: ', round(cor(df.cor[,3], df.cor[,4]), 4)))
+  mutate(gsi_lag1 = lag(GSI,12)) %>%
+  filter(year>1997) %>% 
+  tidyr::drop_na() #GSI by month and with year lag
 
-lm_gsi<-lm(GSI ~ recruit_est, data=df.cor)
-summary(lm_gsi)
-cor.test(df.cor$recruit_est, df.cor$GSI, method=c("pearson"))
+#by season
+gsi_winter <- filter(df.gsi, month %in% c(1,2,3))
+gsi_spring <- filter(df.gsi, month %in% c(4,5,6))
+gsi_summer <- filter(df.gsi, month %in% c(7,8,9))
+gsi_fall <- filter(df.gsi, month %in% c(10,11,12))
 
-ggscatter(df.cor, x = "recruit_est", y = "GSI", 
+## GSI - one year lag
+lm_lag<-lm(gsi_lag1 ~ recruit_est, data=df.gsi)
+summary(lm_lag)
+cor.test(df.gsi$recruit_est, df.gsi$gsi_lag1, method=c("pearson"))
+
+ggscatter(df.gsi, x = "recruit_est", y = "gsi_lag1", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Recruitment Estimate", ylab = "Gulf Stream Position Anomaly")
+          xlab = "Recruitment Estimate", ylab = "Gulf Stream Position Anomaly",
+          title="One year lag")
 
-gsi_gam <- gam(recruit_est ~ s(GSI, k=5), data=df.cor, sp=0.01)
-draw(gsi_gam, residuals=TRUE)
+## GSI - winter
+lm_winter<-lm(GSI ~ recruit_est, data=gsi_winter)
+summary(lm_winter)
+cor.test(gsi_winter$recruit_est, gsi_winter$GSI, method=c("pearson"))
+
+ggscatter(gsi_winter, x = "recruit_est", y = "GSI", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Gulf Stream Position Anomaly",
+          title="Winter")
+
+## GSI - spring
+lm_spring<-lm(GSI ~ recruit_est, data=gsi_spring)
+summary(lm_spring)
+cor.test(gsi_spring$recruit_est, gsi_spring$GSI, method=c("pearson"))
+
+ggscatter(gsi_spring, x = "recruit_est", y = "GSI", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Gulf Stream Position Anomaly",
+          title="spring")
+
+## GSI - summer
+lm_summer<-lm(GSI ~ recruit_est, data=gsi_summer)
+summary(lm_summer)
+cor.test(gsi_summer$recruit_est, gsi_summer$GSI, method=c("pearson"))
+
+ggscatter(gsi_summer, x = "recruit_est", y = "GSI", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Gulf Stream Position Anomaly",
+          title="summer")
+
+## GSI - fall
+lm_fall<-lm(GSI ~ recruit_est, data=gsi_fall)
+summary(lm_fall)
+cor.test(gsi_fall$recruit_est, gsi_fall$GSI, method=c("pearson"))
+
+ggscatter(gsi_fall, x = "recruit_est", y = "GSI", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Gulf Stream Position Anomaly",
+          title="Fall")
+
+
+
 ```
 
 
