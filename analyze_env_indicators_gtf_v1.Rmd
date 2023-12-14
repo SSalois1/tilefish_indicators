@@ -909,7 +909,7 @@ df.lag = shlfvol %>%
   group_by(year,month) %>%
   summarise(mean_t = mean(ShW.T),
             mean_s = mean(ShW.S),
-            mean_v = mean(ShW.Vol)) %>% 
+            mean_v = mean(ShW.Vol)) %>%
   mutate(mean_t_lag2 = lag(mean_t,2),
          mean_t_lag3 = lag(mean_t,3),
          mean_s_lag2 = lag(mean_s,2),
@@ -926,9 +926,9 @@ shlfvol.sfob = sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<20) %>%
 
 # Join with sf/ob data
 df.shlfvol.sfob = dplyr::full_join(shlfvol.sfob, df.lag, by = join_by(year, month)) %>%
-  dplyr::select(year, month, mean_cpue, mean_t, mean_s, mean_v, 
-                mean_t_lag2, mean_s_lag2, mean_v_lag2,
-                mean_t_lag3, mean_s_lag3, mean_v_lag3) %>%
+  dplyr::select(year, month, mean_cpue, mean_t, mean_s, mean_v,
+                mean_t_lag2, mean_v_lag2, mean_s_lag2,
+                mean_t_lag3, mean_v_lag3, mean_s_lag3) %>%
   tidyr::drop_na()
 
 #See what months have data
@@ -1209,39 +1209,46 @@ ggplot2::ggplot(df.shlfvol.sfob,
 **Correlations between sf/ob data and shelf water volume/temp/salinity**
 
 ```{r}
-lm_shlf<-lm(mean_v ~ mean_cpue, data=df.shlfvol.sfob)
+
+shlfvol_nolag = dplyr::full_join(shlfvol.sfob, df.lag, by = join_by(year, month)) %>%
+  dplyr::select(year, month, mean_cpue, mean_t, mean_s, mean_v) %>%
+  tidyr::drop_na()
+shlfvol_nolag <- shlfvol_nolag[-c(11),] #removes outlier
+
+                
+lm_shlf<-lm(mean_v ~ mean_cpue, data=shlfvol_nolag)
 summary(lm_shlf)
 #plot(mean_v ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf)
 
-cor.test(df.shlfvol.sfob$mean_cpue, df.shlfvol.sfob$mean_v, method=c("pearson"))
+cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_v, method=c("pearson"))
 
-ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_v", 
+ggscatter(shlfvol_nolag, x = "mean_cpue", y = "mean_v", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean CPUE/hr", ylab = "Mean shelf water volume", title="Shelf Water Volume and CPUE Correlation")
  
 # shelf water temperature
-lm_shlf_t<-lm(mean_t ~ mean_cpue, data=df.shlfvol.sfob)
+lm_shlf_t<-lm(mean_t ~ mean_cpue, data=shlfvol_nolag)
 summary(lm_shlf_t)
-#plot(mean_t ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf_t)
+#plot(mean_t ~ mean_cpue, data=shlfvol_nolag, pch=1, col="dodgerblue") + abline(lm_shlf_t)
 
-cor.test(df.shlfvol.sfob$mean_cpue, df.shlfvol.sfob$mean_t, method=c("pearson"))
+cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_t, method=c("pearson"))
 
-ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_t", 
+ggscatter(shlfvol_nolag, x = "mean_cpue", y = "mean_t", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean CPUE/hr", ylab = "Mean shelf water temperature", title="Shelf Water Temperature and CPUE Correlation")
 
 # shelf water salinity
-lm_shlf_s<-lm(mean_s ~ mean_cpue, data=df.shlfvol.sfob)
+lm_shlf_s<-lm(mean_s ~ mean_cpue, data=shlfvol_nolag)
 summary(lm_shlf_s)
-#plot(mean_s ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf_s)
+#plot(mean_s ~ mean_cpue, data=shlfvol_nolag, pch=1, col="dodgerblue") + abline(lm_shlf_s)
 
-cor.test(df.shlfvol.sfob$mean_cpue, df.shlfvol.sfob$mean_s, method=c("pearson"))
+cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_s, method=c("pearson"))
 
-ggscatter(df.shlfvol.sfob, x = "mean_cpue", y = "mean_s", 
+ggscatter(shlfvol_nolag, x = "mean_cpue", y = "mean_s", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
@@ -2135,7 +2142,7 @@ habitat.gam <- gam(mean_cpue ~ s(weighted_mean_sst, k=10) + s(mean_bt, k=10), da
 plot(habitat.gam)
 
 ## currents (shelf vol./GSI)
-currents <- dplyr::full_join(df.shlfvol.sfob, gsi.sfob, by = join_by(year, month, mean_cpue)) %>%
+currents <- dplyr::full_join(shlfvol_nolag, gsi.sfob, by = join_by(year, month, mean_cpue)) %>%
   dplyr::select(year, month, mean_cpue, mean_v, GSI)
 
 currents1 <- read.csv(here::here('data/currents.csv')) #cleaned up
