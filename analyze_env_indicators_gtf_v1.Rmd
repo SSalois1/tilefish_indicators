@@ -967,7 +967,7 @@ Annual
 
 # Create shw vol by year w/lag
 df.lag = shlfvol %>%
-  group_by(year) %>% 
+  group_by(year, month) %>% 
   summarise(mean_t = mean(ShW.T),
             mean_s = mean(ShW.S),
             mean_v = mean(ShW.Vol)) %>% 
@@ -982,7 +982,7 @@ df.lag = shlfvol %>%
          mean_v_lag6 = lag(mean_v,6))
 # Join in-situ bottom temps w/assessment recruitment estimate
 df.join.shlf = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
-  dplyr::select(year,recruit_est, mean_t, mean_s, mean_v, 
+  dplyr::select(year, month, recruit_est, mean_t, mean_s, mean_v, 
                 mean_t_lag2, mean_s_lag2, mean_v_lag2,
                 mean_t_lag3, mean_s_lag3, mean_v_lag3,
                 mean_t_lag6, mean_s_lag6, mean_v_lag6) %>%
@@ -1913,6 +1913,18 @@ ggscatter(chl_fall, x = "recruit_est", y = "weighted_mean_chl",
 fprob<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_3x3.csv')) #fprob across all individual strata
 fprob.ind<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_indv_substrata_3x3.csv')) #mean for each of 14 substrata
 fprob.ns<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_n_v_s_substrata_3x3.csv')) #mean for substrata N and S of Hudson canyon
+
+# fprob with year lag
+fprob.lag <- fprob %>%
+  mutate(fprob_lag1 = lag(weighted_mean_fprob,4))
+         
+# Join with recruit estimate
+fprob.rec <- dplyr::full_join(recruit, fprob.lag %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(1998:2020)),
+dplyr::select(year, season, recruit_est, mean_fprob, weighted_mean_fprob, fprob_lag1),
+                 by = join_by(year))
+fprob.rec <- fprob.rec[-c(1:29),] #removes year < 2000 (starting year for fprob)
 ```
 
 ##### Maps (SST fronts) {.tabset}
@@ -1925,10 +1937,213 @@ fprob.ns<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_n_v_s_subst
 
 ```{r}
 
+## Across all strata
+
+#by season
+fprob_winter <- filter(fprob.rec, season %in% c("winter"))
+#fprob_winter <- fprob_winter[-c(18),] # removes outlier
+
+fprob_spring <- filter(fprob.rec, season %in% c("spring"))
+#fprob_spring <- fprob_spring[-c(7),]
+
+fprob_summer <- filter(fprob.rec, season %in% c("summer"))
+#fprob_summer <- fprob_summer[-c(17),] #removes outlier
+
+fprob_fall <- filter(fprob.rec, season %in% c("fall"))
+#fprob_fall <- fprob_fall[-c(62),] #removes outlier
+
+## One year lag - Summer (peak spawn)
+lm_lag<-lm(fprob_lag1 ~ recruit_est, data=fprob_summer)
+summary(lm_lag)
+cor.test(fprob_summer$recruit_est, fprob_summer$fprob_lag1, method=c("pearson"))
+
+ggscatter(fprob_summer, x = "recruit_est", y = "fprob_lag1", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Summer Weighted Mean SST Frontal Probability",
+          title="One Year Lag")
+
+## Winter
+lm_winter<-lm(weighted_mean_fprob ~ recruit_est, data=fprob_winter)
+summary(lm_winter)
+cor.test(fprob_winter$recruit_est, fprob_winter$weighted_mean_fprob, method=c("pearson"))
+
+ggscatter(fprob_winter, x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Winter Weighted Mean SST Frontal Probability",
+          title="Winter")
+
+## Spring
+lm_spring<-lm(weighted_mean_fprob ~ recruit_est, data=fprob_spring)
+summary(lm_spring)
+cor.test(fprob_spring$recruit_est, fprob_spring$weighted_mean_fprob, method=c("pearson"))
+
+ggscatter(fprob_spring, x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Spring Weighted Mean SST Frontal Probability",
+          title="Spring")
+
+## Summer
+lm_summer<-lm(weighted_mean_fprob ~ recruit_est, data=fprob_summer)
+summary(lm_summer)
+cor.test(fprob_summer$recruit_est, fprob_summer$weighted_mean_fprob, method=c("pearson"))
+
+ggscatter(fprob_summer, x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Summer Weighted Mean SST Frontal Probability",
+          title="Summer")
+
+## Fall
+lm_fall<-lm(weighted_mean_fprob ~ recruit_est, data=fprob_fall)
+summary(lm_fall)
+cor.test(fprob_fall$recruit_est, fprob_fall$weighted_mean_fprob, method=c("pearson"))
+
+ggscatter(fprob_fall, x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Fall Weighted Mean SST Frontal Probability",
+          title="Fall")
 
 ```
 
+**Fprob of each substrata**
 
+```{r}
+#join data
+ind.rec <- dplyr::full_join(recruit, fprob.ind %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(1998:2020)),
+dplyr::select(year, season, recruit_est, mean_fprob, weighted_mean_fprob, fprob_lag1),
+                 by = join_by(year))
+ind.rec <- ind.rec[-c(1:29),]  #begin at year 2000
+
+#correlation plot
+ggscatter(ind.rec, x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean SST frontal probability") +
+  facet_wrap(~id) +
+  theme_facet()
+
+# Winter
+ggscatter(ind.rec %>%
+            filter(season == "winter"), 
+          x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean SST frontal probability") +
+  facet_wrap(~id) +
+  theme_facet()
+
+# Spring
+ggscatter(ind.rec %>%
+            filter(season == "spring"), 
+          x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean SST frontal probability") +
+  facet_wrap(~id) +
+  theme_facet()
+
+# Summer
+ggscatter(ind.rec %>%
+            filter(season == "summer"), 
+          x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean SST frontal probability") +
+  facet_wrap(~id) +
+  theme_facet()
+
+# Fall
+ggscatter(ind.rec %>%
+            filter(season == "fall"), 
+          x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean SST frontal probability") +
+  facet_wrap(~id) +
+  theme_facet()
+
+```
+
+**Fprob N/S of Hudson Canyon**
+
+```{r}
+#join data
+ns.rec <- dplyr::full_join(recruit, fprob.ns %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(1998:2020)),
+dplyr::select(year, season, recruit_est, mean_fprob, weighted_mean_fprob, fprob_lag1),
+                 by = join_by(year))
+ns.rec <- ns.rec[-c(1:29),]  #begin at year 2000
+
+# Winter
+ggscatter(ns.rec %>%
+            filter(season == "winter"), 
+          x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean SST frontal probability") +
+  facet_wrap(~substrat) +
+  theme_facet()
+
+# Spring
+ggscatter(ns.rec %>%
+            filter(season == "spring"), 
+          x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean SST frontal probability") +
+  facet_wrap(~substrat) +
+  theme_facet()
+
+# Summer
+ggscatter(ns.rec %>%
+            filter(season == "summer"), 
+          x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean SST frontal probability") +
+  facet_wrap(~substrat) +
+  theme_facet()
+
+# Fall
+ggscatter(ns.rec %>%
+            filter(season == "fall"), 
+          x = "recruit_est", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Mean SST frontal probability") +
+  facet_wrap(~substrat) +
+  theme_facet()
+```
 
 
 
