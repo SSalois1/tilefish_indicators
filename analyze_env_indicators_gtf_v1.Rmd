@@ -1803,6 +1803,18 @@ ggscatter(micro_fall, x = "recruit_est", y = "weighted_mean_micro",
 
 # CHL-A
 chl<-read.csv(here::here('data/chl/chl_ts_gtf_strata.csv'))
+
+# chl with year lag
+chl.lag <- chl %>%
+  mutate(chl_lag1 = lag(weighted_mean_chl,12))
+         
+# Join with recruit estimate
+chl.rec <- dplyr::full_join(recruit, chl.lag %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(1998:2020)),
+dplyr::select(year, month, mean_cpue, mean_chl, weighted_mean_chl, chl_lag1),
+                 by = join_by(year))
+chl.rec <- chl.rec[-c(1:27),] #removes year < 1998 (starting year for analysis)
 ```
 
 ##### Maps (Chlorophyll-A) {.tabset}
@@ -1817,7 +1829,78 @@ chl<-read.csv(here::here('data/chl/chl_ts_gtf_strata.csv'))
 ```{r, c21}
 
 # CHL-A
+#by season
+chl_winter <- filter(chl.rec, month %in% c(1,2,3))
+chl_winter <- chl_winter[-c(18),] # removes outlier
 
+chl_spring <- filter(chl.rec, month %in% c(4,5,6))
+#chl_spring <- chl_spring[-c(7),]
+
+chl_summer <- filter(chl.rec, month %in% c(7,8,9))
+#chl_summer <- chl_summer[-c(17),] #removes outlier
+
+chl_fall <- filter(chl.rec, month %in% c(10,11,12))
+chl_fall <- chl_fall[-c(62),] #removes outlier
+
+## One year lag - Summer (peak spawn)
+lm_lag<-lm(chl_lag1 ~ recruit_est, data=chl_summer)
+summary(lm_lag)
+cor.test(chl_summer$recruit_est, chl_summer$chl_lag1, method=c("pearson"))
+
+ggscatter(chl_summer, x = "recruit_est", y = "chl_lag1", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Summer Weighted Mean Chlorophyll",
+          title="One Year Lag")
+
+## Winter
+lm_winter<-lm(weighted_mean_chl ~ recruit_est, data=chl_winter)
+summary(lm_winter)
+cor.test(chl_winter$recruit_est, chl_winter$weighted_mean_chl, method=c("pearson"))
+
+ggscatter(chl_winter, x = "recruit_est", y = "weighted_mean_chl", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Winter Weighted Mean Chlorophyll",
+          title="Winter")
+
+## Spring
+lm_spring<-lm(weighted_mean_chl ~ recruit_est, data=chl_spring)
+summary(lm_spring)
+cor.test(chl_spring$recruit_est, chl_spring$weighted_mean_chl, method=c("pearson"))
+
+ggscatter(chl_spring, x = "recruit_est", y = "weighted_mean_chl", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Spring Weighted Mean Chlorophyll",
+          title="Spring")
+
+## Summer
+lm_summer<-lm(weighted_mean_chl ~ recruit_est, data=chl_summer)
+summary(lm_summer)
+cor.test(chl_summer$recruit_est, chl_summer$weighted_mean_chl, method=c("pearson"))
+
+ggscatter(chl_summer, x = "recruit_est", y = "weighted_mean_chl", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Summer Weighted Mean Chlorophyll",
+          title="Summer")
+
+## Fall
+lm_fall<-lm(weighted_mean_chl ~ recruit_est, data=chl_fall)
+summary(lm_fall)
+cor.test(chl_fall$recruit_est, chl_fall$weighted_mean_chl, method=c("pearson"))
+
+ggscatter(chl_fall, x = "recruit_est", y = "weighted_mean_chl", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Fall Weighted Mean Chlorophyll",
+          title="Fall")
 ```
 
 
