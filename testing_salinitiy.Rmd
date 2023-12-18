@@ -1,0 +1,282 @@
+---
+title: "GTF_Salinity"
+output:  
+  html_document:
+    code_fold: hide
+    toc: true
+    toc_depth: 5
+    toc_float: true
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r}
+library(ncdf4)
+library(terra)
+library(sf)
+library(tidyverse)
+library(patchwork)
+library(RColorBrewer)
+library(marmap)
+
+# plot(gtf_strata)
+bathy <- marmap::getNOAA.bathy(-81,-58, 27, 46)
+bathy = fortify.bathy(bathy)
+# Pull in bottom trawl strata
+bts_strata <- st_read(here::here('shapefiles/NES_BOTTOM_TRAWL_STRATA.shp'),
+                      quiet = TRUE)
+# Subset to just GTF strata
+gtf_strata <- bts_strata %>% 
+  filter(STRATUMA %in% c('01030', '01040', '01070', '01080', '01110', '01120', 
+                         '01140', '01150', '01670', '01680', '01710', '01720', 
+                         '01750', '01760')) # select just the gtf strata
+# Shapefile for US coastline
+US.areas <- st_read(here::here('shapefiles/USA.shp'), quiet = TRUE)
+
+# Setting up color palette
+jet.colors <-colorRampPalette(c("blue", "#007FFF", "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+
+# Pulling in rasters to compare
+sal.78 = terra::rast(here::here('data/salinity/raster_bricks/dd_sal_78_1993_1996.tif'))
+
+sal.92 = terra::rast(here::here('data/salinity/raster_bricks/dd_sal_92_1993_1996.tif'))
+
+sal.110 = terra::rast(here::here('data/salinity/raster_bricks/dd_sal_110_1993_1996.tif'))
+
+
+```
+
+
+#### Maps (salinity) 
+Plotting!! 
+
+
+```{r, salmaps}
+p1 = sal.78[[1]] %>% as.data.frame(xy= TRUE) %>% 
+  mutate(sal = dd_sal_78_1993_1996_1) %>% na.omit() %>% 
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               col = 'darkgrey') +
+  stat_summary_2d(aes(x=x, y=y, z = sal),
+                  binwidth=c(0.16666,0.16666)) + 
+  scale_fill_gradientn(colors = jet.colors(20), limits = c(30, 38)) +
+  # zlim(30,38) + 
+  geom_sf(data = gtf_strata %>% st_as_sf(),color = 'gray20', fill = NA) +
+  coord_sf(xlim = c(-75,-65.5), ylim = c(36,44), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'Salinity (78m)', title = '78 meters:01/01/1993') +
+  theme_bw()
+
+p2 = sal.92[[1]] %>% as.data.frame(xy= TRUE) %>% 
+  mutate(sal = dd_sal_92_1993_1996_1) %>% na.omit() %>% 
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               col = 'darkgrey') +
+  stat_summary_2d(aes(x=x, y=y, z = sal),
+                  binwidth=c(0.16666,0.16666)) + 
+  scale_fill_gradientn(colors = jet.colors(20), limits = c(30, 38)) +
+  geom_sf(data = gtf_strata %>% st_as_sf(),color = 'gray20', fill = NA) +
+  coord_sf(xlim = c(-75,-65.5), ylim = c(36,44), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'Salinity (92m)', title = '92 meters:01/01/1993') +
+  theme_bw()
+
+p3 = sal.110[[1]] %>% as.data.frame(xy= TRUE) %>% 
+  mutate(sal = dd_sal_110_1993_1996_1) %>% na.omit() %>% 
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               col = 'darkgrey') +
+  stat_summary_2d(aes(x=x, y=y, z = sal),
+                  binwidth=c(0.16666,0.16666)) + 
+  scale_fill_gradientn(colors = jet.colors(20), limits = c(30, 38)) +
+  # zlim(30,38) + 
+  geom_sf(data = gtf_strata %>% st_as_sf(),color = 'gray20', fill = NA) +
+  coord_sf(xlim = c(-75,-65.5), ylim = c(36,44), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'Salinity (110m)', title = '110 meters:01/01/1993') +
+  theme_bw()
+
+
+p1 
+p2
+p3
+```
+
+
+Plotting differences:
+
+```{r, diffmaps}
+
+
+(sal.92[[1]] - sal.78[[1]]) %>% as.data.frame(xy= TRUE) %>% 
+  mutate(sal = dd_sal_92_1993_1996_1) %>% na.omit() %>% 
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               col = 'darkgrey') +
+  stat_summary_2d(aes(x=x, y=y, z = sal),
+                  binwidth=c(0.16666,0.16666)) + 
+  scale_fill_gradientn(colors = jet.colors(20), limits = c(-1, 1)) +
+  geom_sf(data = gtf_strata %>% st_as_sf(),color = 'gray20', fill = NA) +
+  coord_sf(xlim = c(-75,-67), ylim = c(36,40.8), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'Salinity (110m)', title = '92 vs 78 meters:01/01/1993') +
+  theme_bw()
+
+(sal.110[[1]] - sal.92[[1]]) %>% as.data.frame(xy= TRUE) %>% 
+  mutate(sal = dd_sal_110_1993_1996_1) %>% na.omit() %>% 
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               col = 'darkgrey') +
+  stat_summary_2d(aes(x=x, y=y, z = sal),
+                  binwidth=c(0.16666,0.16666)) + 
+  scale_fill_gradientn(colors = jet.colors(20), limits = c(-1, 1)) +
+  # zlim(30,38) + 
+  geom_sf(data = gtf_strata %>% st_as_sf(),color = 'gray20', fill = NA) +
+  coord_sf(xlim = c(-75,-67), ylim = c(36,40.8), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'Salinity (110m)', title = '110 vs 92 meters:01/01/1993') +
+  theme_bw()
+
+
+(sal.110[[1]] - sal.78[[1]]) %>% as.data.frame(xy= TRUE) %>% 
+  mutate(sal = dd_sal_110_1993_1996_1) %>% na.omit() %>% 
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               col = 'darkgrey') +
+  stat_summary_2d(aes(x=x, y=y, z = sal),
+                  binwidth=c(0.16666,0.16666)) + 
+  scale_fill_gradientn(colors = jet.colors(20), limits = c(-1, 1)) +
+  # zlim(30,38) + 
+  geom_sf(data = gtf_strata %>% st_as_sf(),color = 'gray20', fill = NA) +
+  coord_sf(xlim = c(-75,-67), ylim = c(36,40.8), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'Salinity (110m)', title = '110 vs 78 meters:01/01/1993') +
+  theme_bw()
+
+
+
+```
+
+
+
+
+#### Maps (catch) {.tabset}
+
+
+```{r}
+sfobs <-readRDS(here::here('data/catch_data/gold_tile_sf_ob_v1_temp_price.rds'))
+
+sfob.env <- sfobs %>% 
+  mutate(mesh_bin = case_when(mesh_size <= 5.6 ~ 'SM', mesh_size >= 5.6 ~ 'LG',
+                              TRUE ~ 'NA'),
+         cpue_hr = SUM_GT_CATCH/effort_dur) %>% 
+  filter(YEAR %in% c(1998:2022) & mesh_bin == 'SM') %>%
+  dplyr::select(DATE, YEAR, MONTH, YDAY,trip_id,hull_num, area, effort_dur, 
+                SUM_GT_CATCH, cpue_hr, mesh_size, mesh_bin, depth, start_lat, start_lon,
+                bottomT, bottomT_avg, MIN_TEMP_C, MEAN_TEMP_C, MAX_TEMP_C,
+                TEMP_VARIANCE, TEMP_DEVIATION, MEAN_DPTH_M, tri, sed) %>% 
+  mutate(YEAR = as.integer(YEAR)) %>% 
+  rename_all(., .funs = tolower)
+
+```
+
+
+
+Tilefish catch locations (study fleet/observer) by depth
+
+
+```{r, catchmaps, results='asis'}
+# Define category breaks in data set and add a column
+sfob.env <- sfob.env %>% 
+  mutate(bin = cut(depth, seq(min(depth), max(depth) + 4, 10), right = FALSE))
+# identify unique bins to iterate through for maps  
+depths = sort(unique(sfob.env$bin))    
+
+
+dpths.map <- function(depths){
+  sfob.env %>%
+    filter(bin == depths) %>%
+    ggplot() + 
+    geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+    geom_contour(data = bathy,
+                 aes(x=x,y=y,z=-1*z),
+                 breaks=c(50,100,150,200, Inf),
+                 size=c(0.3),
+                 col = 'darkgrey') +
+    stat_summary_2d(aes(x=start_lon, y=start_lat, z = cpue_hr),
+                    binwidth=c(0.16666,0.16666)) +
+    # scale_fill_viridis_c(limits = c(0, 30)) + # hard to set scale bc large cpue range
+    scale_fill_viridis_c() +
+    geom_sf(data = gtf_strata %>% st_as_sf(),color = 'gray20', fill = NA) +
+    theme(legend.position = "bottom",
+          legend.key.size = unit(0.2, "cm"),
+          legend.key.width = unit(1, "cm")) +
+    coord_sf(xlim = c(-75,-65.5), ylim = c(36,44), datum = sf::st_crs(4326))  +
+    labs(x = '', y = '', fill = 'CPUE') +
+    theme_bw() 
+}
+
+for(i in 1:length(depths)){
+  cat("\n#####",  as.character(depths[i]),"\n")
+  print(dpths.map(depths[i])) 
+  cat("\n")   
+}
+
+  
+  
+
+```
+
+
+
+
+
+```{r, eval=FALSE}
+
+# A map that looks at the depth at catch locations - may not be useful
+
+# sfob.env %>%
+#   filter(bin == depths) %>%
+#   ggplot() + 
+#   geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+#   geom_contour(data = bathy,
+#                aes(x=x,y=y,z=-1*z),
+#                breaks=c(50,100,150,200, Inf),
+#                size=c(0.3),
+#                col = 'darkgrey') +
+#   # stat_summary_2d(aes(x=start_lon, y=start_lat, z = cpue_hr),
+#   #                 binwidth=c(0.16666,0.16666)) + 
+#   geom_bin_2d(data = sfob.env,
+#               aes(x = start_lon, 
+#                   y = start_lat, 
+#                   fill = cut(cpue_hr, breaks = depth_breaks,
+#                              labels = label_interval(depth_breaks))), 
+#               alpha = 0.5,
+#               color = 'darkgrey',
+#               binwidth = c(0.33333,0.33333)) +
+#   #scale_fill_viridis_c() + 
+#   theme(legend.position = "bottom",
+#         legend.key.size = unit(0.2, "cm"),
+#         legend.key.width = unit(1, "cm")) +
+#   coord_sf(xlim = c(-75,-65.5), ylim = c(36,44), datum = sf::st_crs(4326))  +
+#   labs(x = '', y = '', fill = 'CPUE') +
+#   theme_bw() 
+
+```
+
