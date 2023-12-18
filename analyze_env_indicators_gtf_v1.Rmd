@@ -392,11 +392,13 @@ sst.lag <- sst %>%
 # filter sfob.env - removes 2002 outlier
 sfob <- sfob.env %>% filter(depth > 50, cpue_hr >0, cpue_hr < 20) %>%
   group_by(year,month) %>% 
-  summarise(mean_cpue = mean(cpue_hr)) 
+  summarise(mean_cpue = mean(cpue_hr),
+            mean_tri = mean(tri),
+            mean_sed = mean(sed)) 
          
 # Join with sf/ob data
 sst.sfob <- dplyr::full_join(sst.lag, sfob, by = join_by(year, month)) %>%
-  dplyr::select(year, month, mean_cpue, mean_sst, weighted_mean_sst, mean_sst_lag2, mean_sst_lag3, mean_sst_lag6) %>%
+  dplyr::select(year, month, mean_cpue, mean_tri, mean_sed, mean_sst, weighted_mean_sst, mean_sst_lag2, mean_sst_lag3, mean_sst_lag6) %>%
   tidyr::drop_na()
 
 
@@ -590,6 +592,8 @@ df.lag.cpue = sfob.env %>% filter(year > 2006 & depth > 50 & cpue_hr > 0 & cpue_
             min_bt = min(bottomt),
             max_bt = max(bottomt),
             sd_bt = sd(bottomt),
+            mean_tri = mean(tri),
+            mean_sed = mean(sed),
             mean_cpue = mean(cpue_hr)) %>% 
   mutate(mean_bt_lag2 = lag(mean_bt,2),
          mean_bt_lag3 = lag(mean_bt,3), 
@@ -922,11 +926,13 @@ shlfvol.sfob = sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<20) %>%
   group_by(year,month) %>% 
   summarise(mean_dpth = mean(depth),
             mean_bt = mean(bottomt),
-            mean_cpue = mean(cpue_hr))
+            mean_cpue = mean(cpue_hr),
+            mean_tri = mean(tri),
+            mean_sed = mean(sed))
 
 # Join with sf/ob data
 df.shlfvol.sfob = dplyr::full_join(shlfvol.sfob, df.lag, by = join_by(year, month)) %>%
-  dplyr::select(year, month, mean_cpue, mean_t, mean_s, mean_v,
+  dplyr::select(year, month, mean_cpue, mean_tri, mean_sed, mean_t, mean_s, mean_v,
                 mean_t_lag2, mean_v_lag2, mean_s_lag2,
                 mean_t_lag3, mean_v_lag3, mean_s_lag3) %>%
   tidyr::drop_na()
@@ -1211,7 +1217,7 @@ ggplot2::ggplot(df.shlfvol.sfob,
 ```{r}
 
 shlfvol_nolag = dplyr::full_join(shlfvol.sfob, df.lag, by = join_by(year, month)) %>%
-  dplyr::select(year, month, mean_cpue, mean_t, mean_s, mean_v) %>%
+  dplyr::select(year, month, mean_cpue, mean_t, mean_s, mean_v, mean_tri, mean_sed) %>%
   tidyr::drop_na()
 shlfvol_nolag <- shlfvol_nolag[-c(11),] #removes outlier
 
@@ -2134,32 +2140,35 @@ ggscatter(fprob.ns, x = "mean_cpue", y = "weighted_mean_fprob",
 
 ```{r}
 ## habitat (sst/bt/sal?)
-habitat <- dplyr::full_join(sst.sfob, df.lag.cpue, by = join_by(year, month, mean_cpue)) %>%
-  dplyr::select(year, month, mean_cpue, weighted_mean_sst, mean_bt)
+habitat <- dplyr::full_join(
+  sst.sfob, df.lag.sfob, by = join_by(year, month, mean_cpue, mean_tri, mean_sed)) %>%
+  dplyr::select(year, month, mean_cpue, weighted_mean_sst, mean_bt, mean_tri, mean_sed)
+habitat <- habitat[-c(1:22),] #removes year up to 2007 (start of insitu bt data)
 
-
-habitat.gam <- gam(mean_cpue ~ s(weighted_mean_sst, k=10) + s(mean_bt, k=10), data=habitat, method="REML")
-plot(habitat.gam)
+habitat.gam <- gam(mean_cpue ~ s(weighted_mean_sst, k=10) + s(mean_bt, k=10) + mean_tri + mean_sed, data=habitat, method="REML")
+summary(habitat.gam)
+plot(habitat.gam, seWithMean = TRUE)
 
 ## currents (shelf vol./GSI)
-currents <- dplyr::full_join(shlfvol_nolag, gsi.sfob, by = join_by(year, month, mean_cpue)) %>%
-  dplyr::select(year, month, mean_cpue, mean_v, GSI)
+df.gsi <- read.csv(here::here('data/gulf_stream_index/df.gsi.csv')) #with tri and sed
+df.gsi <- tidyr::drop_na(df.gsi)
 
-currents1 <- read.csv(here::here('data/currents.csv')) #cleaned up
 
-currents.gam <- gam(mean_cpue ~ s(mean_v, k=10) + s(GSI, k=10), data=currents1, method="REML")
-plot(currents.gam)
+currents <- dplyr::full_join(
+  shlfvol_nolag, df.gsi, by = join_by(year, month, mean_cpue, mean_tri, mean_sed)) %>%
+  dplyr::select(year, month, mean_cpue, mean_v, GSI, mean_tri, mean_sed)
+
+currents1 <- read.csv(here::here('data/gulf_stream_index/currents.csv')) #cleaned up
+
+currents.gam <- gam(mean_cpue ~ s(mean_v, k=10) + s(GSI, k=10) + mean_tri + mean_sed, data=currents1, method="REML")
+summary(currents.gam)
+plot(currents.gam, seWithMean = TRUE)
 
 ## food availability
-food <- dplyr::full_join(micro.sfob, chl.sfob, by = join_by(year, month, mean_cpue)) %>%
-  dplyr::select(year, month, mean_cpue, weighted_mean_micro, weighted_mean_chl)
-#join micro and chl
 
-#fprob is by season, added to food csv
+food <- read.csv(here::here('data/food.csv')) #cleaned up with added tri and sed 
 
-food1 <- read.csv(here::here('data/food.csv')) #fprob is by season, added to food csv
-
-food.gam <- gam(mean_cpue ~ s(weighted_mean_micro, k=10) + s(weighted_mean_chl, k=10) + s(weighted_mean_fprob, k=10), data=food1, method="REML")
+food.gam <- gam(mean_cpue ~ s(weighted_mean_micro, k=10) + s(weighted_mean_chl, k=10) + s(weighted_mean_fprob, k=10) + mean_tri + mean_sed, data=food, method="REML")
 
 plot(food.gam)
 ```
