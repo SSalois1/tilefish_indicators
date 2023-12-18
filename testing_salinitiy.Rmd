@@ -179,9 +179,14 @@ Plotting differences:
 #### Maps (catch) {.tabset}
 
 
+
 ```{r}
+# Reading in the study fleet and observer data file 
 sfobs <-readRDS(here::here('data/catch_data/gold_tile_sf_ob_v1_temp_price.rds'))
 
+# Wrangling the data to first create a column to categorize mesh size (small 
+# and large). After that I filter by years suggested by WG and mesh size 
+# suggested by WG
 sfob.env <- sfobs %>% 
   mutate(mesh_bin = case_when(mesh_size <= 5.6 ~ 'SM', mesh_size >= 5.6 ~ 'LG',
                               TRUE ~ 'NA'),
@@ -200,9 +205,12 @@ sfob.env <- sfobs %>%
 
 Tilefish catch locations (study fleet/observer) by depth
 
+*Note: scales are not the same for these maps because cpue varies so much, its 
+hard to find a meaningful range for all depths.* 
 
 ```{r, catchmaps, results='asis'}
-# Define category breaks in data set and add a column
+
+# Define category that breaks up depths in data set and add as a column
 sfob.env <- sfob.env %>% 
   mutate(bin = cut(depth, seq(min(depth), max(depth) + 4, 10), right = FALSE))
 # identify unique bins to iterate through for maps  
