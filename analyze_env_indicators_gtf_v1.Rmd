@@ -387,7 +387,7 @@ sst.lag <- sst %>%
 df <- dplyr::full_join(recruit, sst.lag %>%
                    group_by(year) %>% 
                    filter(year %in% c(2000:2020)),
-dplyr::select(year, month, mean_cpue, mean_sst, weighted_mean_sst, mean_sst_lag1),
+dplyr::select(year, month, recruit.est, mean_sst, weighted_mean_sst, mean_sst_lag1),
                  by = join_by(year))
 sst.rec <- df[-c(1:29),] #removes year < 2000 (when SST data begins)
 
@@ -654,21 +654,85 @@ ggplot2::ggplot(df.join.bt %>% filter(month %in% c(9,10,11,12)),
 
 ```
 
-**Correlations**
+**Stephanie- Updated BT**
 
 ```{r}
-lm_bt<-lm(mean_bt ~ recruit_est, data=df.join.bt)
-summary(lm_bt)
-cor.test(df.join.bt$recruit_est, df.join.bt$mean_bt, method=c("pearson"))
+bt <- read.csv(here::here('data/bottom_temp/bt_ts_gtf_1970_2023.csv'))
 
-ggscatter(df.join.bt, x = "recruit_est", y = "mean_bt", 
-        add = "reg.line", conf.int = TRUE, 
-        cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
-        add.params=list(color="dodgerblue", fill="lightgray"),
-        xlab = "Recruitment Estimate", ylab = "Mean bottom temp (°C)")
+# BT with year lag
+bt.lag <- bt %>%
+  mutate(mean_bt_lag1 = lag(weighted_mean_bt,12))
+         
+# Join with recruit estimate
+bt.rec <- dplyr::full_join(recruit, bt.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, weighted_mean_bt, mean_bt_lag1) %>%
+  tidyr::drop_na()
 
-#t_gam <- gam(recruit_est ~ s(mean_bt), data=df.join.bt, method="REML")
-#draw(bt_gam, residuals=TRUE)
+#by season
+bt_winter <- filter(bt.rec, month %in% c(1,2,3))
+bt_spring <- filter(bt.rec, month %in% c(4,5,6))
+bt_summer <- filter(bt.rec, month %in% c(7,8,9))
+bt_fall <- filter(bt.rec, month %in% c(10,11,12))
+
+## One year lag - Summer (peak spawn)
+lm_lag<-lm(mean_bt_lag1 ~ recruit_est, data=bt_summer)
+summary(lm_lag)
+cor.test(bt_summer$recruit_est, bt_summer$mean_bt_lag1, method=c("pearson"))
+
+ggscatter(bt_summer, x = "recruit_est", y = "mean_bt_lag1", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Summer Weighted Mean BT",
+          title="One Year Lag")
+
+## Winter
+lm_winter<-lm(weighted_mean_bt ~ recruit_est, data=bt_winter)
+summary(lm_winter)
+cor.test(bt_winter$recruit_est, bt_winter$weighted_mean_bt, method=c("pearson"))
+
+ggscatter(bt_winter, x = "recruit_est", y = "weighted_mean_bt", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Winter Weighted Mean BT",
+          title="Winter")
+
+## Spring
+lm_spring<-lm(weighted_mean_bt ~ recruit_est, data=bt_spring)
+summary(lm_spring)
+cor.test(bt_spring$recruit_est, bt_spring$weighted_mean_bt, method=c("pearson"))
+
+ggscatter(bt_spring, x = "recruit_est", y = "weighted_mean_bt", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Spring Weighted Mean BT",
+          title="Spring")
+
+## Summer
+lm_summer<-lm(weighted_mean_bt ~ recruit_est, data=bt_summer)
+summary(lm_summer)
+cor.test(bt_summer$recruit_est, bt_summer$weighted_mean_bt, method=c("pearson"))
+
+ggscatter(bt_summer, x = "recruit_est", y = "weighted_mean_bt", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Summer Weighted Mean BT",
+          title="Summer")
+
+## Fall
+lm_fall<-lm(weighted_mean_bt ~ recruit_est, data=bt_fall)
+summary(lm_fall)
+cor.test(bt_fall$recruit_est, bt_fall$weighted_mean_bt, method=c("pearson"))
+
+ggscatter(bt_fall, x = "recruit_est", y = "weighted_mean_bt", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Recruitment Estimate", ylab = "Fall Weighted Mean BT",
+          title="Fall")
 ```
 
 
@@ -2145,6 +2209,40 @@ ggscatter(ns.rec %>%
   theme_facet()
 ```
 
+##### GAMs
+
+```{r}
+## habitat (sst/bt/sal?)
+habitat <- dplyr::full_join(
+  sst.rec, bt.rec, by = join_by(year, month, recruit_est)) %>%
+  dplyr::select(year, month, recruit_est, weighted_mean_sst, weighted_mean_bt)
+
+
+habitat.gam <- gam(recruit_est ~ s(weighted_mean_sst, k=10) + s(weighted_mean_bt, k=10), data=habitat, method="REML")
+summary(habitat.gam)
+plot(habitat.gam, seWithMean=TRUE)
+
+##currents (shelfvol/gsi)
+currents <- dplyr::full_join(
+  df.join.shlf, df.gsi, by = join_by(year, month, recruit_est)) %>%
+  dplyr::select(year,month, recruit_est, mean_v, GSI)
+#no gsi <1998, no shlfvol 2020 >
+
+currents.gam <- gam(recruit_est ~ s(mean_v, k=10) + s(GSI, k=10), data=currents, method="REML")
+summary(currents.gam)
+plot(currents.gam, seWithMean=TRUE)
+
+## food availability (micro/chl-a/sstfronts)
+food1<- dplyr::full_join(
+  micro.rec, chl.rec, by = join_by(year, month, recruit_est)) %>%
+  dplyr::select(year,month, recruit_est, weighted_mean_micro, weighted_mean_chl)
+
+food<-read.csv(here::here('data/food_rec.csv')) #join with fprob and grouped by season
+
+food.gam <- gam(recruit_est ~ s(weighted_mean_micro, k=10) + s(weighted_mean_chl, k=10) + s(weighted_mean_fprob, k=10), data=food, method="REML")
+summary(food.gam)
+plot(food.gam, seWithMean=TRUE)
+```
 
 
 
