@@ -2359,7 +2359,7 @@ food<-read.csv(here::here('data/food_rec.csv')) #join with fprob and grouped by 
 
 food.gam <- gam(recruit_est ~ s(weighted_mean_micro, k=10) + s(weighted_mean_chl, k=10) + s(weighted_mean_fprob, k=10), data=food, method="REML")
 summary(food.gam)
-plot(food.gam, seWithMean=TRUE)
+plot(food.gam, seWithMean=TRUE) 
 ```
 
 
