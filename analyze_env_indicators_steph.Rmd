@@ -406,36 +406,23 @@ Here is bottom temp and recruitment not lagged
 ```{r, nolagbt}
 
 df = bt.rec %>% 
-    mutate(season = case_when(month %in% c(12,1,2) ~ 'winter', 
-                              month %in% c(3,4,5) ~ 'spring', 
-                              month %in% c(6,7,8) ~ 'summer', 
-                              month %in% c(9,10,11) ~ 'fall'))
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
 
 
 df %>% group_by(year, season) %>% 
   summarize(bt = mean(weighted_mean_bt),
             r = mean(recruit_est)) %>% 
-ggplot2::ggplot(aes(x=r, y=bt, color = factor(season))) + 
-  geom_point() +
-  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
-              aes(colour = factor(season)))  +
-  labs(color = 'Season', title = 'Recruit year (no lag)') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw() #+ 
-  # facet_wrap(~season)
+  ggscatter(x = "bt", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean bottom temp", ylab = "Recruitment Estimate",
+            title="Recruitment year - no lag")+
+  facet_wrap(~season, scales = 'free')
 
-
-df %>% group_by(year, season) %>% 
-  summarize(bt = mean(weighted_mean_bt),
-            r = mean(recruit_est)) %>% 
-  ggplot2::ggplot(aes(x=r, y=bt, color = factor(season))) + 
-  geom_point() +
-  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
-              aes(colour = factor(season)))  +
-  labs(color = 'Season', title = 'Recruit year (no lag)') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw() + 
-facet_wrap(~season)
 
 ```
 
@@ -446,37 +433,23 @@ Here we have BT lagged by 1 year - by month (updated 12/19)
 
 ```{r, lagbt}
 
-df = bt.rec %>% 
-    mutate(season = case_when(month %in% c(12,1,2) ~ 'winter', 
-                              month %in% c(3,4,5) ~ 'spring', 
-                              month %in% c(6,7,8) ~ 'summer', 
-                              month %in% c(9,10,11) ~ 'fall'))
+# df = bt.rec %>% 
+#   mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+#                             month %in% c(4,5,6) ~ 'spring', 
+#                             month %in% c(7,8,9) ~ 'summer', 
+#                             month %in% c(10,11,12) ~ 'fall'))
 
 
 df %>% group_by(year, season) %>% 
   summarize(bt = mean(mean_bt_lag1),
             r = mean(recruit_est)) %>% 
-ggplot2::ggplot(aes(x=r, y=bt, color = factor(season))) + 
-  geom_point() +
-  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
-              aes(colour = factor(season)))  +
-  labs(color = 'Season', title = 'Lag 1 year') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw() #+ 
-  # facet_wrap(~season)
-
-
-df %>% group_by(year, season) %>% 
-  summarize(bt = mean(mean_bt_lag1),
-            r = mean(recruit_est)) %>% 
-  ggplot2::ggplot(aes(x=r, y=bt, color = factor(season))) + 
-  geom_point() +
-  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
-              aes(colour = factor(season)))  +
-  labs(color = 'Season', title = 'Lag 1 year') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw() + 
-facet_wrap(~season)
+  ggscatter(x = "bt", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean bottom temp", ylab = "Recruitment Estimate",
+            title="Lag one year")+
+  facet_wrap(~season, scales = 'free')
 
 ```
 
@@ -497,104 +470,126 @@ depths
 ##### Salinity analysis
 
 
+78 Meters 
 
-```{r, sal1}
-sal <- read.csv(here::here('data/salinity/sal_78m_monthly_ts_gtf.csv'))
+```{r, 78m}
+# Read in data at 78 m depth
+sal78 <- read.csv(here::here('data/salinity/sal_78m_monthly_ts_gtf.csv'))
 
 # BT with year lag
-sal.lag <- sal %>%
-  mutate(mean_sal_lag1 = lag(weighted_mean_sal_78m,12), 
+sal78.lag <- sal78 %>%
+  mutate(mean_sal78_lag1 = lag(weighted_mean_sal_78m,12), 
          year = as.numeric(year))
          
 # Join with recruit estimate
-sal.rec <- dplyr::full_join(recruit, sal.lag, by = join_by(year)) %>%
-  dplyr::select(year, month, recruit_est, weighted_mean_sal_78m, mean_sal_lag1) %>%
+sal78.rec <- dplyr::full_join(recruit, sal78.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, weighted_mean_sal_78m, mean_sal78_lag1) %>%
+  tidyr::drop_na()
+
+```
+
+
+```{r, nolagsal}
+
+df = sal78.rec %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+# Plot without lag
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(weighted_mean_sal_78m),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (78m)", ylab = "Recruitment Estimate",
+            title="Recruit year - no lag 78m")+
+  facet_wrap(~season, scales = 'free')
+# Plot with lag
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(mean_sal78_lag1),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (78m)", ylab = "Recruitment Estimate",
+            title="Lag one year 78m")+
+  facet_wrap(~season, scales = 'free')
+
+#### Computing correlations
+# win.cor = df %>% filter(season == 'winter') 
+# print(paste0('correlation coeff: ', round(cor(win.cor[,3], win.cor[,5]), 4)))
+# fal.cor = df %>% filter(season == 'fall') 
+# print(paste0('correlation coeff: ', round(cor(fal.cor[,3], fal.cor[,4]), 4)))
+
+
+```
+
+
+
+
+92 Meters 
+
+```{r, 92m}
+# Read in data at 92 meter depth 
+
+sal92 <- read.csv(here::here('data/salinity/sal_92m_monthly_ts_gtf.csv'))
+
+# BT with year lag
+sal92.lag <- sal92 %>%
+  mutate(mean_sal92_lag1 = lag(weighted_mean_sal_92m,12), 
+         year = as.numeric(year))
+         
+# Join with recruit estimate
+sal92.rec <- dplyr::full_join(recruit, sal92.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, weighted_mean_sal_92m, mean_sal92_lag1) %>%
   tidyr::drop_na()
 
 ```
 
 
 
-```{r, nolagsal}
+```{r, nolagsal2}
 
-df = sal.rec %>% 
-    mutate(season = case_when(month %in% c(12,1,2) ~ 'winter', 
-                              month %in% c(3,4,5) ~ 'spring', 
-                              month %in% c(6,7,8) ~ 'summer', 
-                              month %in% c(9,10,11) ~ 'fall'))
+df = sal92.rec %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
 
-
+# Plot without lag
 df %>% group_by(year, season) %>% 
-  summarize(sal = mean(weighted_mean_sal_78m),
+  summarize(sst = mean(weighted_mean_sal_92m),
             r = mean(recruit_est)) %>% 
-ggplot2::ggplot(aes(x=r, y=sal, color = factor(season))) + 
-  geom_point() +
-  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
-              aes(colour = factor(season)))  +
-  labs(color = 'Season', title = 'Recruit year (no lag)') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw() #+ 
-  # facet_wrap(~season)
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (92m)", ylab = "Recruitment Estimate",
+            title="Recruit year - no lag 92mm")+
+  facet_wrap(~season, scales = 'free')
 
-
+# Plot with lag
 df %>% group_by(year, season) %>% 
-  summarize(sal = mean(weighted_mean_sal_78m),
+  summarize(sst = mean(mean_sal92_lag1),
             r = mean(recruit_est)) %>% 
-  ggplot2::ggplot(aes(x=r, y=sal, color = factor(season))) + 
-  geom_point() +
-  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
-              aes(colour = factor(season)))  +
-  labs(color = 'Season', title = 'Recruit year (no lag)') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw() + 
-facet_wrap(~season)
-
-```
-
-
-
-
-
-```{r, laggedgsal}
-
-df = sal.rec %>% 
-    mutate(season = case_when(month %in% c(12,1,2) ~ 'winter', 
-                              month %in% c(3,4,5) ~ 'spring', 
-                              month %in% c(6,7,8) ~ 'summer', 
-                              month %in% c(9,10,11) ~ 'fall'))
-
-
-df %>% group_by(year, season) %>% 
-  summarize(sal = mean(mean_sal_lag1),
-            r = mean(recruit_est)) %>% 
-ggplot2::ggplot(aes(x=r, y=sal, color = factor(season))) + 
-  geom_point() +
-  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
-              aes(colour = factor(season)))  +
-  labs(color = 'Season', title = 'Lag 1 year') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw() #+ 
-  # facet_wrap(~season)
-
-
-df %>% group_by(year, season) %>% 
-  summarize(sal = mean(mean_sal_lag1),
-            r = mean(recruit_est)) %>% 
-  ggplot2::ggplot(aes(x=r, y=sal, color = factor(season))) + 
-  geom_point() +
-  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
-              aes(colour = factor(season)))  +
-  labs(color = 'Season', title = 'Lag 1 year') +
-  stat_cor(aes(label=..rr.label..)) +
-  theme_bw() + 
-facet_wrap(~season)
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (92m)", ylab = "Recruitment Estimate",
+            title="Lag one year 92m")+
+  facet_wrap(~season, scales = 'free')
 
 
 #### Computing correlations
-win.cor = df %>% filter(season == 'winter') 
-print(paste0('correlation coeff: ', round(cor(win.cor[,3], win.cor[,5]), 4)))
-fal.cor = df %>% filter(season == 'fall') 
-print(paste0('correlation coeff: ', round(cor(fal.cor[,3], fal.cor[,4]), 4)))
+# win.cor = df %>% filter(season == 'winter') 
+# print(paste0('correlation coeff: ', round(cor(win.cor[,3], win.cor[,5]), 4)))
+# fal.cor = df %>% filter(season == 'fall') 
+# print(paste0('correlation coeff: ', round(cor(fal.cor[,3], fal.cor[,4]), 4)))
 
 
 ```
@@ -602,6 +597,117 @@ print(paste0('correlation coeff: ', round(cor(fal.cor[,3], fal.cor[,4]), 4)))
 
 
 
+
+
+
+110 Meters 
+
+```{r, 110m}
+# Wrangling the data
+sal110 <- read.csv(here::here('data/salinity/sal_110m_monthly_ts_gtf.csv'))
+
+# BT with year lag
+sal110.lag <- sal110 %>%
+  mutate(mean_sal110_lag1 = lag(weighted_mean_sal_110m,12), 
+         year = as.numeric(year))
+         
+# Join with recruit estimate
+sal110.rec <- dplyr::full_join(recruit, sal110.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, weighted_mean_sal_110m, mean_sal110_lag1) %>%
+  tidyr::drop_na()
+
+```
+
+
+```{r, sal110reg}
+
+# Add a category for month
+df = sal110.rec %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+# Plot without lag
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(weighted_mean_sal_110m),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (110m)", ylab = "Recruitment Estimate",
+            title="Recruit year - no lag 110m")+
+  facet_wrap(~season, scales = 'free')
+
+# Plot with lag
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(mean_sal110_lag1),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (110m)", ylab = "Recruitment Estimate",
+            title="Lag one year - 110m")+
+  facet_wrap(~season, scales = 'free')
+
+#### Computing correlations
+# win.cor = df %>% filter(season == 'winter') 
+# print(paste0('correlation coeff: ', round(cor(win.cor[,3], win.cor[,5]), 4)))
+# fal.cor = df %>% filter(season == 'fall') 
+# print(paste0('correlation coeff: ', round(cor(fal.cor[,3], fal.cor[,4]), 4)))
+
+```
+
+
+##### Cold pool analysis
+Recruit with no lag has a significant negative relationship with increased
+cold pool extent. 
+
+
+Excerpt from New York Bight Fish, Fisheries, and Sand Features: Data Review
+Volume 1: Literature Synthesis and Gap Analysis: 
+
+Natural events are documented for Scup (Morse 1978; Smith and Norcross 1968), Bluefish (Slater et al. 2007), and Northern Puffer (Wicklund 1970) in the MAB and NYB as a result of upwelling of cold bottom water, and for Golden Tilefish on the OCS from eastward flow of the Cold Pool (Fisher et al. 2014). Such events are
+difficult to detect and quantify because they are episodic, because they could happen in winter when there are few observers, or because they leave dead animals on the bottom instead of floating (Fisher et al.2014) so that they are only detected incidentally by trawler (e.g., Woodhead (1964)).
+
+```{r}
+library(ecodata)
+# Pull cold pool data
+cp.ex <- ecodata::cold_pool
+# Selecting just the extent
+cp <- cp.ex %>% filter(Time %in% c(1994:2020), 
+              Var == 'extent_index') %>%
+  mutate(ext = Value,
+         ext_lag1 = lag(ext,1), 
+         year = as.numeric(Time))
+## NOTE: I added more lags (up to 7), but they only got worse - may make more 
+## sense to do more lags with cpue data with older fish
+
+
+# Join with recruit estimate 
+cp.rec <- dplyr::full_join(recruit, cp, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, ext, ext_lag1) %>% 
+  filter(year %in% c(1994:2020))
+
+cp.rec %>% 
+  ggscatter(x = 'ext', y = 'recruit_est', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Cold pool extent", ylab = "Recruitment Estimate",
+            title="Recruit year")
+
+cp.rec %>% 
+  ggscatter(x = 'ext_lag1', y = 'recruit_est', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Cold pool extent", ylab = "Recruitment Estimate",
+            title="Lag 1 year")
+
+```
 
 
 
