@@ -1,0 +1,1017 @@
+---
+title: "Environmental indicator analysis-Tilefish"
+output:  
+  html_document:
+    code_fold: hide
+    toc: true
+    toc_depth: 5
+    toc_float: true
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r, wrangling}
+
+# Loading packages and data
+library(ggplot2)
+library(ecodata)
+library(lubridate)
+library(dplyr)
+library(stringr)
+library(marmap) # bathymetry
+library(RColorBrewer)
+library(ggnewscale)
+library(sf)
+library(cowplot)
+library(tidyverse)
+library(ggpubr)
+library(sf)
+library(ggdist)
+library(ggpubr)
+library(wesanderson)
+library(raster)
+#library(glmTMB)
+library(ggpmisc)
+library(mgcViz)
+library(gratia)
+
+# CPUE data (no env covariates)
+gt_data_model_cpue <- read.csv(here::here('data/catch_data/gt_data_model_cpue.csv'))
+#names(gt_data_model_cpue) <- tolower(names(gt_data_model_cpue))
+# Add in column with cpue 
+# note: Paul indicated to use small mesh
+gt_data_model_cpue <- gt_data_model_cpue %>% 
+       rename_all(., .funs = tolower) %>% 
+  mutate(mesh_bin = case_when(mesh_size <= 5.6 ~ 'SM',mesh_size >= 5.6 ~ 'LG',
+                                                      TRUE ~ 'NA')) %>%
+  mutate(cpue_hr = sum_gt_catch/effort_dur)
+
+# Catch data: 
+sfobs <-readRDS(here::here('data/catch_data/gold_tile_sf_ob_v1_temp_price.rds'))
+
+sfob.env <- sfobs %>% 
+  mutate(mesh_bin = case_when(mesh_size <= 5.6 ~ 'SM', mesh_size >= 5.6 ~ 'LG',
+                              TRUE ~ 'NA'),
+         cpue_hr = SUM_GT_CATCH/effort_dur) %>% 
+  filter(YEAR %in% c(1998:2022) & mesh_bin == 'SM') %>%
+  dplyr::select(DATE, YEAR, MONTH, YDAY,trip_id,hull_num, area, effort_dur, 
+         SUM_GT_CATCH, cpue_hr, mesh_size, mesh_bin, depth, start_lat, start_lon,
+         bottomT, bottomT_avg, MIN_TEMP_C, MEAN_TEMP_C, MAX_TEMP_C,
+         TEMP_VARIANCE, TEMP_DEVIATION, MEAN_DPTH_M, tri, sed) %>% 
+  mutate(YEAR = as.integer(YEAR)) %>% 
+  rename_all(., .funs = tolower)
+
+
+areas <- sort(unique(sfob.env$area))
+catch.tally.ann <- sfob.env %>% # aggregate by year
+  group_by(year) %>% 
+  summarise(ttl_sum = sum(sum_gt_catch))
+
+# Length data from observer program 
+lengths <- read.csv(here::here('data/catch_data/gt_data_length_andy.csv')) 
+names(lengths) <- tolower(names(lengths))
+
+# Recruitment estimates from 2021 report
+recruit <- read.csv(here::here('data/assessment_data/tilefish_rec_estimate_2021.csv'))
+
+# Merge SF/Obs catch data with recruit estimates:
+catch_recruit <- cbind(recruit %>% filter(year %in% c(1998:2020)),
+                       catch.tally.ann %>%
+                         filter(year %in% c(1998:2020)) %>%
+                         dplyr::select(ttl_sum))
+
+# loading in shape files for maps
+US.areas <- st_read(here::here('shapefiles/USA.shp'), quiet = TRUE)
+canada.areas <- st_read(here::here('shapefiles/Canada.shp'), quiet = TRUE)
+bts_strata <- st_read(here::here('shapefiles/NES_BOTTOM_TRAWL_STRATA.shp'),
+                      quiet = TRUE)
+# plot(bts_strata) # to see all bottom trawl strata
+
+gtf_strata <- bts_strata %>% 
+  filter(STRATUMA %in% c('01030', '01040', '01070', '01080', '01110', '01120', 
+                         '01140', '01150', '01670', '01680', '01710', '01720', 
+                         '01750', '01760')) # select just the gtf strata
+# plot(gtf_strata)
+bathy <- marmap::getNOAA.bathy(-81,-58, 27, 46)
+bathy = fortify.bathy(bathy)
+
+```
+
+### Recruitment estimate
+
+Figure 3. Age-1 recruitment estimate from the 2021 tilefish assessment across 
+all years
+
+```{r, c4}
+
+ggplot(recruit, aes(x = factor(year), y = recruit_est, group = 1))+
+   geom_rect(aes(xmin = '2007', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'red', alpha = 0.02) +
+  geom_rect(aes(xmin = '2000', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'lightblue', alpha = 0.05) +
+   geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
+  geom_line(color = 'black', size = 1.5) +
+  annotate("text", label = "*",
+    x = 26, y = 14000, size = 8, colour = "red" )+
+  xlab('Year') + 
+  ylab('Total sum tilefish catch') + 
+  # facet_wrap(~month)+
+  theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  ecodata::theme_facet()
+
+### Thought: Should we isolate years associated w/strong year classes (or bad)
+###           for correlations and analyses? 
+```
+
+
+##### SST
+
+```{r, c9}
+# SST
+sst<-read.csv(here::here('data/sst/sst_ts_gtf_strata.csv'))
+```
+
+
+```{r}
+# SST with year lag
+sst.lag <- sst %>%
+  mutate(mean_sst_lag1 = lag(weighted_mean_sst,12))
+         
+# Join with recruit estimate
+df <- dplyr::full_join(recruit, sst.lag %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(2000:2020)),
+dplyr::select(year, month, recruit.est, mean_sst, weighted_mean_sst, mean_sst_lag1),
+                 by = join_by(year))
+sst.rec <- df[-c(1:29),] #removes year < 2000 (when SST data begins)
+
+#by season
+sst_winter <- filter(sst.rec, month %in% c(1,2,3))
+sst_spring <- filter(sst.rec, month %in% c(4,5,6))
+sst_summer <- filter(sst.rec, month %in% c(7,8,9))
+sst_fall <- filter(sst.rec, month %in% c(10,11,12))
+
+
+```
+
+Here we have SST in recruitment year - by month (updated 12/19)
+
+```{r, nolagsst}
+df = sst.rec %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(weighted_mean_sst),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean Sea Surface Temperature", ylab = "Recruitment Estimate",
+            title="Recruitment year - no lag")+
+  facet_wrap(~season, scales = 'free')
+
+```
+
+
+Here we have SST lagged by 1 year - by month (updated 12/19)
+
+```{r, laggedsst}
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(mean_sst_lag1),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean sea surface temperature", ylab = "Recruitment Estimate",
+            title="Lag one year")+
+  facet_wrap(~season, scales = 'free')
+```
+
+
+
+##### Bottom Temperature
+
+
+##### Bottom T analysis
+
+The following figures compare in-situ bottom temperature from the study-fleet
+data set to the recruitment estimate. 
+
++ Note here temperatures are averaged across all depths > 50 for each month.
+
+
+```{r}
+bt <- read.csv(here::here('data/bottom_temp/bt_ts_gtf_1970_2023.csv'))
+
+# BT with year lag
+bt.lag <- bt %>%
+  mutate(mean_bt_lag1 = lag(weighted_mean_bt,12))
+         
+# Join with recruit estimate
+bt.rec <- dplyr::full_join(recruit, bt.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, weighted_mean_bt, mean_bt_lag1) %>%
+  tidyr::drop_na()
+
+#by season
+bt_winter <- filter(bt.rec, month %in% c(1,2,3))
+bt_spring <- filter(bt.rec, month %in% c(4,5,6))
+bt_summer <- filter(bt.rec, month %in% c(7,8,9))
+bt_fall <- filter(bt.rec, month %in% c(10,11,12))
+
+```
+
+Here is bottom temp and recruitment not lagged 
+
+```{r, nolagbt}
+
+df = bt.rec %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+
+df %>% group_by(year, season) %>% 
+  summarize(bt = mean(weighted_mean_bt),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "bt", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean bottom temp", ylab = "Recruitment Estimate",
+            title="Recruitment year - no lag")+
+  facet_wrap(~season, scales = 'free')
+
+
+```
+
+
+
+Here we have BT lagged by 1 year - by month (updated 12/19)
+
+
+```{r, lagbt}
+
+df %>% group_by(year, season) %>% 
+  summarize(bt = mean(mean_bt_lag1),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "bt", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean bottom temp", ylab = "Recruitment Estimate",
+            title="Lag one year")+
+  facet_wrap(~season, scales = 'free')
+
+```
+
+
+
+
+
+##### Salinity
+
+Here we explore salinity from the GLORYS reanalysis model at three different 
+depths
+
+ + 78 meters (relevant to larvae, recruits)
+ + 92 meters (relevant recruits, juveniles)
+ + 110 meters (relevant to juveniles, adults)
+
+
+##### Salinity analysis
+
+
+78 Meters 
+
+```{r, 78m}
+# Read in data at 78 m depth
+sal78 <- read.csv(here::here('data/salinity/sal_78m_monthly_ts_gtf.csv'))
+
+# BT with year lag
+sal78.lag <- sal78 %>%
+  mutate(mean_sal78_lag1 = lag(weighted_mean_sal_78m,12), 
+         year = as.numeric(year))
+         
+# Join with recruit estimate
+sal78.rec <- dplyr::full_join(recruit, sal78.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, weighted_mean_sal_78m, mean_sal78_lag1) %>%
+  tidyr::drop_na()
+
+```
+
+
+```{r, nolagsal}
+
+df = sal78.rec %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+# Plot without lag
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(weighted_mean_sal_78m),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (78m)", ylab = "Recruitment Estimate",
+            title="Recruit year - no lag 78m")+
+  facet_wrap(~season, scales = 'free')
+# Plot with lag
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(mean_sal78_lag1),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (78m)", ylab = "Recruitment Estimate",
+            title="Lag one year 78m")+
+  facet_wrap(~season, scales = 'free')
+
+#### Computing correlations
+# win.cor = df %>% filter(season == 'winter') 
+# print(paste0('correlation coeff: ', round(cor(win.cor[,3], win.cor[,5]), 4)))
+# fal.cor = df %>% filter(season == 'fall') 
+# print(paste0('correlation coeff: ', round(cor(fal.cor[,3], fal.cor[,4]), 4)))
+
+
+```
+
+
+
+
+92 Meters 
+
+```{r, 92m}
+# Read in data at 92 meter depth 
+
+sal92 <- read.csv(here::here('data/salinity/sal_92m_monthly_ts_gtf.csv'))
+
+# BT with year lag
+sal92.lag <- sal92 %>%
+  mutate(mean_sal92_lag1 = lag(weighted_mean_sal_92m,12), 
+         year = as.numeric(year))
+         
+# Join with recruit estimate
+sal92.rec <- dplyr::full_join(recruit, sal92.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, weighted_mean_sal_92m, mean_sal92_lag1) %>%
+  tidyr::drop_na()
+
+```
+
+
+
+```{r, nolagsal2}
+
+df = sal92.rec %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+# Plot without lag
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(weighted_mean_sal_92m),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (92m)", ylab = "Recruitment Estimate",
+            title="Recruit year - no lag 92mm")+
+  facet_wrap(~season, scales = 'free')
+
+# Plot with lag
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(mean_sal92_lag1),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (92m)", ylab = "Recruitment Estimate",
+            title="Lag one year 92m")+
+  facet_wrap(~season, scales = 'free')
+
+
+#### Computing correlations
+# win.cor = df %>% filter(season == 'winter') 
+# print(paste0('correlation coeff: ', round(cor(win.cor[,3], win.cor[,5]), 4)))
+# fal.cor = df %>% filter(season == 'fall') 
+# print(paste0('correlation coeff: ', round(cor(fal.cor[,3], fal.cor[,4]), 4)))
+
+
+```
+
+
+
+
+
+
+
+110 Meters 
+
+```{r, 110m}
+# Wrangling the data
+sal110 <- read.csv(here::here('data/salinity/sal_110m_monthly_ts_gtf.csv'))
+
+# BT with year lag
+sal110.lag <- sal110 %>%
+  mutate(mean_sal110_lag1 = lag(weighted_mean_sal_110m,12), 
+         year = as.numeric(year))
+         
+# Join with recruit estimate
+sal110.rec <- dplyr::full_join(recruit, sal110.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, weighted_mean_sal_110m, mean_sal110_lag1) %>%
+  tidyr::drop_na()
+
+```
+
+
+```{r, sal110reg}
+
+# Add a category for month
+df = sal110.rec %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+# Plot without lag
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(weighted_mean_sal_110m),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (110m)", ylab = "Recruitment Estimate",
+            title="Recruit year - no lag 110m")+
+  facet_wrap(~season, scales = 'free')
+
+# Plot with lag
+df %>% group_by(year, season) %>% 
+  summarize(sst = mean(mean_sal110_lag1),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "sst", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean salinity (110m)", ylab = "Recruitment Estimate",
+            title="Lag one year - 110m")+
+  facet_wrap(~season, scales = 'free')
+
+#### Computing correlations
+# win.cor = df %>% filter(season == 'winter') 
+# print(paste0('correlation coeff: ', round(cor(win.cor[,3], win.cor[,5]), 4)))
+# fal.cor = df %>% filter(season == 'fall') 
+# print(paste0('correlation coeff: ', round(cor(fal.cor[,3], fal.cor[,4]), 4)))
+
+```
+
+
+##### Cold pool analysis
+Recruit with no lag has a significant negative relationship with increased
+cold pool extent. 
+
+
+Excerpt from New York Bight Fish, Fisheries, and Sand Features: Data Review
+Volume 1: Literature Synthesis and Gap Analysis: 
+
+Natural events are documented for Scup (Morse 1978; Smith and Norcross 1968), Bluefish (Slater et al. 2007), and Northern Puffer (Wicklund 1970) in the MAB and NYB as a result of upwelling of cold bottom water, and for Golden Tilefish on the OCS from eastward flow of the Cold Pool (Fisher et al. 2014). Such events are
+difficult to detect and quantify because they are episodic, because they could happen in winter when there are few observers, or because they leave dead animals on the bottom instead of floating (Fisher et al.2014) so that they are only detected incidentally by trawler (e.g., Woodhead (1964)).
+
+```{r}
+library(ecodata)
+# Pull cold pool data
+cp.ex <- ecodata::cold_pool
+# Selecting just the extent
+cp <- cp.ex %>% filter(Time %in% c(1994:2020), 
+              Var == 'extent_index') %>%
+  mutate(ext = Value,
+         ext_lag1 = lag(ext,1), 
+         year = as.numeric(Time))
+## NOTE: I added more lags (up to 7), but they only got worse - may make more 
+## sense to do more lags with cpue data with older fish
+
+
+# Join with recruit estimate 
+cp.rec <- dplyr::full_join(recruit, cp, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, ext, ext_lag1) %>% 
+  filter(year %in% c(1994:2020))
+
+cp.rec %>% 
+  ggscatter(x = 'ext', y = 'recruit_est', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Cold pool extent", ylab = "Recruitment Estimate",
+            title="Recruit year")
+
+cp.rec %>% 
+  ggscatter(x = 'ext_lag1', y = 'recruit_est', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Cold pool extent", ylab = "Recruitment Estimate",
+            title="Lag 1 year")
+
+```
+
+
+
+#### Currents
+
+Cross-shelf processes may influence the retention or displacement of tilefish 
+during early life history stages. These are explored below.
+
+##### Shelf water volume
+
+Shelf water volume: A measure of the volume of water bounded inshore of the
+shelf-slope front. In this analysis, shelf water is defined as all water having 
+salinity <34 psu. The position of the shelf-slope front varies inter-annually
+with the higher shelf water values indicating the front being pushed further 
+towards the shelf break.
+
+high shv: front pushed towards sbf
+low shv: front pushed inshore (more slope water on shelf)
+
+Hypothesis: Higher recruitment success correlated with years of higher shelf 
+water volume in spring/summer. These months months may be particularly 
+important as that is when spawning is occurring and the position of the sbf
+may influence the position of larvae (away from spawning grounds).
+
+Additional variables in this dataset are shelf water temperature and salinity 
+which may also be indicative of habitat conditions. 
+
+
+```{r, s.w.volume}
+
+# Shelf water volume
+shlfvol <- read.csv(here::here('data/shelf_water_volume/ShelfWaterVolume_BSB_update.csv'))
+
+# wrangling date info, converting doy to date and month 
+yrs <- as.vector(nrow(shlfvol))
+shlfvol$Year <- as.character(shlfvol$Year)
+for (i in 1:nrow(shlfvol)){
+  yrs[i] <- strsplit(shlfvol$Year, ".", fixed = TRUE)[[i]][1]
+}
+shlfvol$year <- yrs
+
+shlfvol <- shlfvol %>% mutate(date_= as.Date(Year.Day-1, 
+                                             origin=paste0(year, "-01-01")), 
+                              month= strftime(date_, "%m"), 
+                              day=strftime(date_,"%d"), 
+                              year = as.integer(year),
+                              month = as.numeric(month))  
+
+
+# Create shw vol by month w/lag
+df.lag = shlfvol %>%
+  group_by(year,month) %>% 
+  summarise(mean_t = mean(ShW.T),
+            mean_s = mean(ShW.S),
+            mean_v = mean(ShW.Vol)) %>% 
+  mutate(mean_t_lag2 = lag(mean_t,2),
+         mean_t_lag3 = lag(mean_t,3), 
+         mean_t_lag6 = lag(mean_t,6),
+         mean_s_lag2 = lag(mean_s,2),
+         mean_s_lag3 = lag(mean_s,3), 
+         mean_s_lag6 = lag(mean_s,6),
+         mean_v_lag2 = lag(mean_v,2),
+         mean_v_lag3 = lag(mean_v,3), 
+         mean_v_lag6 = lag(mean_v,6))
+# Join in-situ bottom temps w/assessment recruitment estimate
+df.join.shlf = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, mean_t, mean_s, mean_v, 
+                mean_t_lag2, mean_s_lag2, mean_v_lag2,
+                mean_t_lag3, mean_s_lag3, mean_v_lag3) %>%
+  tidyr::drop_na()
+
+```
+
+##### Shelf Water Volume Analysis
+
+```{r}
+df.join.shlf = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, mean_t, mean_s, mean_v) %>%
+  tidyr::drop_na() #removing lags to visualize all months
+ 
+df.join.shlf = mutate(df.join.shlf, mean_v_lag1 = lag(mean_v,12)) #creating one year lag
+
+df = df.join.shlf %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+# Plot without lag
+df %>% group_by(year, season) %>% 
+  summarize(v = mean_v,
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "v", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean shelf water volume", ylab = "Recruitment Estimate",
+            title="Recruit year - no lag")+
+  facet_wrap(~season, scales = 'free')
+
+# Plot with lag
+df %>% group_by(year, season) %>% 
+  summarize(v = mean(mean_v_lag1),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "v", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Mean shelf water volume", ylab = "Recruitment Estimate",
+            title="Lag one year")+
+  facet_wrap(~season, scales = 'free')
+
+```
+
+
+##### Gulf-stream index
+
+Gulf stream index was calculated based on method presented by 
+Pérez-Hernández and Joyce (2014). The gulf stream index (GSI) is a measure of 
+the degrees latitude above the average Gulf Stream position based on ocean
+temperature at 200m (15 C) depth between 55W to 75W.
+
+Positive values indicate a the mean position of the GS is more Northernly, 
+whereas negative values indicate a more Southernly position. 
+
+```{r}
+gsi.m <- read.csv(here::here('data/gulf_stream_index/mm_gsi_1954_2022_chen.csv'))
+
+
+## --- This joins recruit estimate data to GSI data and 
+## --- calculates some summary stats(mean, sd, min, max)
+df <- dplyr::full_join(recruit, gsi.m %>%
+                   group_by(year) %>% 
+                   filter(month %in% c(3:8)) %>% 
+                   summarise(m.gsi = mean(GSI),
+                             sd.gsi = sd(GSI),
+                             max.gsi = max(GSI), 
+                             min.gsi = min(GSI)), 
+                 by = join_by(year)) %>% 
+  mutate(pos = ifelse(m.gsi > 0, 'Northerly', 'Southerly'), 
+         n.pos = ifelse(m.gsi > 0, 1, 0))
+df <- df[-c(51:69),] # this removes rows w/years that don't match 
+# (could/should do this before hand in more standardized way - will do later)
+
+# Plot the time series (mean GSI for the months of interest)
+# -- Note: here I am looking just at March through August assuming these
+# months are the most important to recently spawned individuals 
+ggplot(data = df, 
+       aes(x = year, y = m.gsi)) +
+  geom_line(lwd = 1) +
+  geom_hline(yintercept = 0, lty = 2) +
+  labs(title = 'Mean GS position anomaly March:August',
+       x = 'Year', 
+       y = "Gulf stream position anomaly\n") +
+theme_bw() 
+
+# Looking across all months 
+dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, GSI) %>%
+  #filter(month %in% c(3:9)) %>%  
+  filter(year>1997) %>% 
+  tidyr::drop_na() %>% 
+ggplot2::ggplot(.,aes(x=recruit_est, y=GSI)) + 
+  geom_point(color = 'black') +
+  facet_wrap(~month)+
+  xlab('Recruitment estimate') +
+  ylab('Gulf stream position anomaly') +
+  labs(title = 'Gulf stream index by month') +
+  geom_hline(yintercept = 0, lty = 2) +
+  theme_bw()
+ 
+```
+
+##### Gulf Stream Index Analysis
+
+```{r}
+df.gsi = dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, GSI) %>%
+  mutate(gsi_lag1 = lag(GSI,12)) %>%
+  filter(year>1997) %>% 
+  tidyr::drop_na() #GSI by month and with year lag
+
+df = df.gsi %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+# Plot without lag
+df %>% group_by(year, season) %>% 
+  summarize(gsi = mean(GSI),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "gsi", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Gulf Stream position anomaly", ylab = "Recruitment Estimate",
+            title="Recruit year - no lag")+
+  facet_wrap(~season, scales = 'free')
+
+# Plot with lag
+df %>% group_by(year, season) %>% 
+  summarize(gsi = mean(gsi_lag1),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "gsi", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Gulf Stream Position Anomaly", ylab = "Recruitment Estimate",
+            title="Lag one year")+
+  facet_wrap(~season, scales = 'free')
+
+```
+
+#### Food availablity 
+
+Larval tilefish eat zooplankton, likely calanus. *Calanus finmarchicus* are a
+copepod (crustacean) with a one-year life cycle and are an important food 
+source for many commercially important species. Calanus spp. are lipid rich, 
+herbivorous species that eat phytoplankton, diatoms in particular 
+(Hobbs et al. 2020).
+
+Diatoms are often represented as microplankton (>20 µm), but many species are of
+the nanoplankton size class (2-20 µm), and a smaller few may even overlap 
+with picoplanton size class (<2 µm).
+
+
+##### Microplankton
+```{r}
+micro<-read.csv(here::here('data/phyto_size_class/microplankton_ts_gtf_strata.csv'))
+
+# micro with year lag
+micro.lag <- micro %>%
+  mutate(micro_lag1 = lag(weighted_mean_micro,12))
+         
+# Join with recruit estimate
+micro.rec <- dplyr::full_join(recruit, micro.lag %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(1998:2020)),
+dplyr::select(year, month, mean_cpue, mean_micro, weighted_mean_micro, micro_lag1),
+                 by = join_by(year))
+micro.rec <- micro.rec[-c(1:27),] #removes year < 1998 (starting year for analysis)
+```
+
+
+##### Microplankton maps {.tabset}
+
+```{r, micromaps, results='asis'}
+
+# microplankton
+
+```
+
+##### Microplankton analysis
+
+```{r}
+df = micro.rec %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+# Plot without lag
+df %>% group_by(year, season) %>% 
+  summarize(micro = mean(weighted_mean_micro),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "micro", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Weighted mean microplankton", ylab = "Recruitment Estimate",
+            title="Recruit year - no lag")+
+  facet_wrap(~season, scales = 'free')
+
+# Plot with lag
+df %>% group_by(year, season) %>% 
+  summarize(micro = mean(micro_lag1),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "micro", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Weighted Mean Microplankton", ylab = "Recruitment Estimate",
+            title="Lag one year")+
+  facet_wrap(~season, scales = 'free')
+
+```
+
+
+
+
+##### Chlorophyll-A
+```{r}
+
+# CHL-A
+chl<-read.csv(here::here('data/chl/chl_ts_gtf_strata.csv'))
+
+# chl with year lag
+chl.lag <- chl %>%
+  mutate(chl_lag1 = lag(weighted_mean_chl,12))
+         
+# Join with recruit estimate
+chl.rec <- dplyr::full_join(recruit, chl.lag %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(1998:2020)),
+dplyr::select(year, month, mean_cpue, mean_chl, weighted_mean_chl, chl_lag1),
+                 by = join_by(year))
+chl.rec <- chl.rec[-c(1:27),] #removes year < 1998 (starting year for analysis)
+```
+
+##### Maps (Chlorophyll-A) {.tabset}
+```{r, chlmaps, results='asis'}
+
+# CHL-A
+
+```
+
+##### Chlorophyll-A analysis
+
+```{r, c21}
+df = chl.rec %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+# Plot without lag
+df %>% group_by(year, season) %>% 
+  summarize(chl = mean(weighted_mean_chl),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "chl", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Weighted mean chlorophyll-a", ylab = "Recruitment Estimate",
+            title="Recruit year - no lag")+
+  facet_wrap(~season, scales = 'free')
+
+# Plot with lag
+df %>% group_by(year, season) %>% 
+  summarize(chl = mean(chl_lag1),
+            r = mean(recruit_est)) %>% 
+  ggscatter(x = "chl", y = "r", 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Weighted mean chlorophyll-a", ylab = "Recruitment Estimate",
+            title="Lag one year")+
+  facet_wrap(~season, scales = 'free')
+```
+
+
+
+
+##### SST Fronts
+
+```{r}
+# SST fronts
+fprob<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_3x3.csv')) #fprob across all individual strata
+fprob.ind<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_indv_substrata_3x3.csv')) #mean for each of 14 substrata
+fprob.ns<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_n_v_s_substrata_3x3.csv')) #mean for substrata N and S of Hudson canyon
+
+# fprob with year lag
+fprob.lag <- fprob %>%
+  mutate(fprob_lag1 = lag(weighted_mean_fprob,4))
+         
+# Join with recruit estimate
+fprob.rec <- dplyr::full_join(recruit, fprob.lag %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(1998:2020)),
+dplyr::select(year, season, recruit_est, mean_fprob, weighted_mean_fprob, fprob_lag1),
+                 by = join_by(year))
+fprob.rec <- fprob.rec[-c(1:29),] #removes year < 2000 (starting year for fprob)
+```
+
+##### Maps (SST fronts) {.tabset}
+```{r, sst front maps, results='asis'}
+
+
+```
+
+##### SST Fronts analysis
+
+```{r}
+
+
+```
+
+**Fprob of each substrata**
+
+```{r}
+#join data
+ind.rec <- dplyr::full_join(recruit, fprob.ind %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(1998:2020)),
+dplyr::select(year, season, recruit_est, mean_fprob, weighted_mean_fprob, fprob_lag1),
+                 by = join_by(year))
+ind.rec <- ind.rec[-c(1:29),]  #begin at year 2000
+
+
+
+```
+
+**Fprob N/S of Hudson Canyon**
+
+```{r}
+#join data
+ns.rec <- dplyr::full_join(recruit, fprob.ns %>%
+                   group_by(year) %>% 
+                   filter(year %in% c(1998:2020)),
+dplyr::select(year, season, recruit_est, mean_fprob, weighted_mean_fprob, fprob_lag1),
+                 by = join_by(year))
+ns.rec <- ns.rec[-c(1:29),]  #begin at year 2000
+
+
+```
+
+##### GAMs
+
+```{r}
+## habitat (sst/bt/sal?)
+habitat <- dplyr::full_join(
+  sst.rec, bt.rec, by = join_by(year, month, recruit_est)) %>%
+  dplyr::select(year, month, recruit_est, weighted_mean_sst, weighted_mean_bt)
+
+
+habitat.gam <- gam(recruit_est ~ s(weighted_mean_sst, k=10) + s(weighted_mean_bt, k=10), data=habitat, method="REML")
+summary(habitat.gam)
+plot(habitat.gam, seWithMean=TRUE)
+
+##currents (shelfvol/gsi)
+currents <- dplyr::full_join(
+  df.join.shlf, df.gsi, by = join_by(year, month, recruit_est)) %>%
+  dplyr::select(year,month, recruit_est, mean_v, GSI)
+#no gsi <1998, no shlfvol 2020 >
+
+currents.gam <- gam(recruit_est ~ s(mean_v, k=10) + s(GSI, k=10), data=currents, method="REML")
+summary(currents.gam)
+plot(currents.gam, seWithMean=TRUE)
+
+## food availability (micro/chl-a/sstfronts)
+food1<- dplyr::full_join(
+  micro.rec, chl.rec, by = join_by(year, month, recruit_est)) %>%
+  dplyr::select(year,month, recruit_est, weighted_mean_micro, weighted_mean_chl)
+
+food<-read.csv(here::here('data/food_rec.csv')) #join with fprob and grouped by season
+
+food.gam <- gam(recruit_est ~ s(weighted_mean_micro, k=10) + s(weighted_mean_chl, k=10) + s(weighted_mean_fprob, k=10), data=food, method="REML")
+summary(food.gam)
+plot(food.gam, seWithMean=TRUE)
+```
+
+
+
+References: 
+
+Joyce, Terrence M, Young-Oh Kwon, Hyodae Seo, and Caroline C Ummenhofer. 2019.
+“Meridional Gulf Stream Shifts Can Influence Wintertime Variability in the North 
+Atlantic Storm Track and Greenland Blocking.” 
+Geophysical Research Letters 46 (3): 1702–8. https://doi.org/10.1029/2018GL081087.
+
+Hobbs, L., Banas, N. S., Cottier, F. R., Berge, J., & Daase, M. (2020). Eat or 
+sleep: availability of winter prey explains mid-winter and spring activity in
+an Arctic Calanus population. Frontiers in Marine Science, 7, 541564.
+
+
+
+Pérez-Hernández, M. Dolores, and Terrence M. Joyce. 2014. 
+“Two Modes of Gulf Stream Variability Revealed in the Last 
+Two Decades of Satellite Altimeter Data.” 
+Journal of Physical Oceanography 44 (1): 149–63. https://doi.org/10.1175/JPO-D-13-0136.1.
+
+
+
+
+
+
+
+
+
+
+
+
+
