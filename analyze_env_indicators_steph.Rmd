@@ -662,8 +662,7 @@ df %>% group_by(year, season) %>%
 
 
 ##### Cold pool analysis
-Recruit with no lag has a significant negative relationship with increased
-cold pool extent. 
+
 
 
 Excerpt from New York Bight Fish, Fisheries, and Sand Features: Data Review
@@ -672,22 +671,33 @@ Volume 1: Literature Synthesis and Gap Analysis:
 Natural events are documented for Scup (Morse 1978; Smith and Norcross 1968), Bluefish (Slater et al. 2007), and Northern Puffer (Wicklund 1970) in the MAB and NYB as a result of upwelling of cold bottom water, and for Golden Tilefish on the OCS from eastward flow of the Cold Pool (Fisher et al. 2014). Such events are
 difficult to detect and quantify because they are episodic, because they could happen in winter when there are few observers, or because they leave dead animals on the bottom instead of floating (Fisher et al.2014) so that they are only detected incidentally by trawler (e.g., Woodhead (1964)).
 
+
+Cold pool extent: 
+
+Positive values == Larger
+Negative values == Smaller
+
+
+Result: Recruit with no lag has a significant negative relationship with 
+increased cold pool extent, this lines up with what would be expected for GTF. 
+
+
 ```{r}
 library(ecodata)
 # Pull cold pool data
-cp.ex <- ecodata::cold_pool
+cp <- ecodata::cold_pool
 # Selecting just the extent
-cp <- cp.ex %>% filter(Time %in% c(1994:2020), 
+cp.ex <- cp %>% filter(Time %in% c(1994:2020), 
               Var == 'extent_index') %>%
   mutate(ext = Value,
          ext_lag1 = lag(ext,1), 
          year = as.numeric(Time))
-## NOTE: I added more lags (up to 7), but they only got worse - may make more 
+## NOTE: I added more lags (up to 7), but they only got worse - this makes more 
 ## sense to do more lags with cpue data with older fish
 
 
 # Join with recruit estimate 
-cp.rec <- dplyr::full_join(recruit, cp, by = join_by(year)) %>%
+cp.rec <- dplyr::full_join(recruit, cp.ex, by = join_by(year)) %>%
   dplyr::select(year, recruit_est, ext, ext_lag1) %>% 
   filter(year %in% c(1994:2020))
 
@@ -708,6 +718,106 @@ cp.rec %>%
             title="Lag 1 year")
 
 ```
+
+
+Persistence Index:
+From tech doc: Model_PI measures the duration of the Cold Pool and is estimated using the month when bottom temperature rises above 10C after the Cold Pool is formed each year
+
+Positive values == Longer
+Negative values == Shorter
+
+Result: Significant negative relationship between recruitment estimate and 
+persistence of cold pool, recruitment declines with increased cold pool 
+persistence. 
+
+```{r}
+# Selecting just the persitence index
+cp.pi <- cp %>% filter(Time %in% c(1994:2020), 
+              Var == 'persistence_index') %>%
+  mutate(pers = Value,
+         pers_lag1 = lag(pers,1), 
+         year = as.numeric(Time))
+## NOTE: I added more lags (up to 7), but they only got worse - this makes more 
+## sense to do more lags with cpue data with older fish
+
+
+# Join with recruit estimate 
+cp.rec <- dplyr::full_join(recruit, cp.pi, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, pers, pers_lag1) %>% 
+  filter(year %in% c(1994:2020))
+
+cp.rec %>% 
+  ggscatter(x = 'pers', y = 'recruit_est', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "CP Persistence Index", ylab = "Recruitment Estimate",
+            title="Recruit year")
+
+cp.rec %>% 
+  ggscatter(x = 'pers_lag1', y = 'recruit_est', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "CP Persistence Index", ylab = "Recruitment Estimate",
+            title="Lag 1 year")
+```
+
+
+
+Cold pool index:
+
+From tech doc: The Model_SEI is estimated by the number of cells where bottom temperature remains below 10C for at least 2 months between June and September.
+
+Positive values == colder 
+Negative values == warmer
+
+Result: Linear positive trend is weak and non-signficant. 
+
+```{r}
+# Selecting just the persitence index
+cpi <- cp %>% filter(Time %in% c(1994:2020), 
+              Var == 'cold_pool_index') %>%
+  mutate(cpi = Value,
+         cpi_lag1 = lag(cpi,1), 
+         year = as.numeric(Time))
+## NOTE: I added more lags (up to 7), but they only got worse - this makes more 
+## sense to do more lags with cpue data with older fish
+
+
+# Join with recruit estimate 
+cp.rec <- dplyr::full_join(recruit, cpi, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, cpi, cpi_lag1) %>% 
+  filter(year %in% c(1994:2020))
+
+cp.rec %>% 
+  ggscatter(x = 'cpi', y = 'recruit_est', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Cold Pool Index", ylab = "Recruitment Estimate",
+            title="Recruit year")
+
+cp.rec %>% 
+  ggscatter(x = 'cpi_lag1', y = 'recruit_est', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Cold Pool Index", ylab = "Recruitment Estimate",
+            title="Lag 1 year")
+
+
+```
+
+
+
+
+
+
+
+
+
+
 
 
 
