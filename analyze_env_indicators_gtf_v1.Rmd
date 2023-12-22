@@ -222,136 +222,6 @@ for(i in 1:length(yrs)){
 ```
 
 
-
-### Recruitment estimate
-
-Figure 3. Age-1 recruitment estimate from the 2021 tilefish assessment across 
-all years
-
-```{r, c4}
-
-ggplot(recruit, aes(x = factor(year), y = recruit_est, group = 1))+
-   geom_rect(aes(xmin = '2007', xmax = '2022', ymin = -Inf, ymax = Inf), 
-            fill = 'red', alpha = 0.02) +
-  geom_rect(aes(xmin = '2000', xmax = '2022', ymin = -Inf, ymax = Inf), 
-            fill = 'lightblue', alpha = 0.05) +
-   geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
-  geom_line(color = 'black', size = 1.5) +
-  annotate("text", label = "*",
-    x = 26, y = 14000, size = 8, colour = "red" )+
-  xlab('Year') + 
-  ylab('Total sum tilefish catch') + 
-  # facet_wrap(~month)+
-  theme(axis.text.x = element_text(color = 'black',
-                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
-  ecodata::theme_facet()
-
-### Thought: Should we isolate years associated w/strong year classes (or bad)
-###           for correlations and analyses? 
-```
-
-
-Figure 4. Recruitment estimates in focus years 
-
-+ Paul has suggested that data used to calculate recruitment 
-estimates was strongest from 2000 to present. 
-+ Extended to 1998 to capture both the strong year class and El nino associated 
-with that year. 
-
-```{r, c5}
-ggplot(recruit %>% filter(year %in% c(1998:2022)),
-       aes(x = factor(year), y = recruit_est, group = 1))+
-  geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
-  geom_line(color = 'black', size = 1.2) +
-  xlab('Year') + 
-  ylab('Recruit estimates') + 
-  theme(axis.text.x = element_text(color = 'black',
-                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
-  ecodata::theme_facet()
-```
-
-Figure 5. Recruitment estimates and Study Fleet and Observer catch data. Black
-line denotes recruitment estimate, yellow denotes sum of annual catch data
-across both Study fleet and Observer programs. 
-
-```{r, c6}
-options(scipen=999)
-ggplot(catch_recruit) +
-  geom_line(aes(x = factor(year), y = recruit_est, group = 1),
-            col = 'black', size = 1.2) +
-  geom_line(aes(x = factor(year), y = ttl_sum*1000), size = 1.2, 
-            color = 'goldenrod1', group = 1) +
-  scale_y_continuous(sec.axis = sec_axis(~./1000, name = 'Catch (lbs)')) + 
-  geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
-  xlab('Year') + 
-  ylab('Recruit estimates') + 
-   theme(axis.text.x = element_text(color = 'black',
-                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
-  ecodata::theme_facet()
-```
-
-### Length data
-
-#### All lengths
-
-Figure 6. Distribution of lengths 
-Figure 7. Length frequencies
-Figure 8. Frequency of smaller individuals 
-
-
-```{r, c7}
-# Define category breaks
-size_breaks <- c(0,10,20,30,40, 50, 60, 70, 80, 90, 100)
-# Making a function to bin the catches
-label_interval <- function(breaks) {
-  paste0("(", breaks[1:length(breaks) - 1], "-", breaks[2:length(breaks)], ")")
-}
-labels = label_interval(size_breaks)
-
-# length freq. table
-tab = table(cut(lengths$lenanml, 
-    breaks = size_breaks,
-    labels = label_interval(size_breaks)))
-
-## Plot full distribution
-ggplot(lengths,
-       aes(x = lenanml)) + 
-  geom_bar(position = position_dodge(), 
-           alpha = 0.4, fill= 'blue', color="black") + 
-  xlab('Tilefish length (cm)') +
-  theme_bw() +
-  theme_facet()
-
-# Plot length frequencies
-barplot(tab, xlab = 'Length bins (mm)', main = '')
-
-# Just the little ones
-barplot(tab[1:3], xlab = 'Length bins (mm)', main = '')
-```
-
-#### Juveniles 
-
-Young of year - year 1 and 2 size class
-
-```{r, c8}
-ggplot(lengths %>% filter(lenanml <= 26),
-       aes(x = lenanml)) + 
-  geom_bar(position = position_dodge(), 
-           fill= 'slateblue', color="black") + 
-  xlab('Tilefish length (cm)') +
-  theme_bw() +
-  theme_facet()
-ggplot(lengths %>% filter(lenanml <= 26),
-       aes(x = lenanml, fill = numlen)) + 
-  geom_bar(position = position_dodge(), 
-           alpha = 0.4, fill= 'blue', color="black") + 
-  xlab('Tilefish length (cm)') +
-  theme_bw() +
-  facet_wrap(~year) + 
-  theme_facet()
-```
-
-
 ### Environmental data
 ***
 
@@ -390,7 +260,7 @@ sst.lag <- sst %>%
          mean_sst_lag6 = lag(weighted_mean_sst,6))
 
 # filter sfob.env - removes 2002 outlier
-sfob <- sfob.env %>% filter(depth > 50, cpue_hr >0, cpue_hr < 20) %>%
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr >0, cpue_hr < 15) %>%
   group_by(year,month) %>% 
   summarise(mean_cpue = mean(cpue_hr),
             mean_tri = mean(tri),
@@ -491,18 +361,13 @@ summary(lm_sst)
 #plot(weighted_mean_sst ~ mean_cpue, data=sst.sfob, pch=1, col="dodgerblue") + abline(lm_sst)
 
 cor.test(sst.sfob$mean_cpue, sst.sfob$weighted_mean_sst, method=c("pearson"))
-ggscatter(sst.sfob, x = "mean_cpue", y = "weighted_mean_sst", 
+ggscatter(sst.sfob, x = "weighted_mean_sst", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Mean CPUE/hr", ylab = "Weighted Mean SST")
+          xlab = "Weighted Mean SST", ylab = "Monthly Mean CPUE/hr",
+          title = "Sea Surface Temperature")
 
-# GAM
-#sst_gam <- gam(mean_cpue ~ s(weighted_mean_sst), data=sst.sfob, method="REML")
-#gam.check(sst_gam)
-#summary(sst_gam)
-
-#draw(sst_gam, residuals=TRUE)
 ```
 
 
@@ -585,7 +450,7 @@ data set to the Study fleet and Observer tilefish catch data.
 ```{r}
 
 #filter by year, depth, cpue (includes min, max, and sd of bottomt by month)
-df.lag.cpue = sfob.env %>% filter(year > 2006 & depth > 50 & cpue_hr > 0 & cpue_hr < 20) %>%
+df.lag.cpue = sfob.env %>% filter(year > 2006 & depth > 50 & cpue_hr > 0 & cpue_hr < 15) %>%
   group_by(year,month) %>% 
   summarise(mean_dpth = mean(depth),
             mean_bt = mean(bottomt),
@@ -773,23 +638,13 @@ summary(lm_bt)
 
 cor.test(df.lag.sfob$mean_cpue, df.lag.sfob$mean_bt, method=c("pearson"))
 
-ggscatter(df.lag.sfob, x = "mean_cpue", y = "mean_bt", 
+ggscatter(df.lag.sfob, x = "mean_bt", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Mean CPUE/hr", ylab = "Mean bottom temp (°C)")
+          xlab = "Mean bottom temp (°C)", ylab = "Monthly Mean CPUE/hr",
+          title = "In-situ Bottom Temperature")
 
-
-```
-
-**SFOB insitu bottom temp GAM**
-
-```{r}
-#bt_gam <- gam(mean_cpue ~ s(mean_bt), data=df.lag.sfob, method="REML")
-#gam.check(bt_gam)
-#summary(bt_gam)
-
-#draw(bt_gam, residuals=TRUE)
 
 ```
 
@@ -922,7 +777,7 @@ df.lag = shlfvol %>%
          mean_v_lag3 = lag(mean_v,3))
 
 #filter sfob.env 
-shlfvol.sfob = sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<20) %>%
+shlfvol.sfob = sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<15) %>%
   group_by(year,month) %>% 
   summarise(mean_dpth = mean(depth),
             mean_bt = mean(bottomt),
@@ -1219,7 +1074,7 @@ ggplot2::ggplot(df.shlfvol.sfob,
 shlfvol_nolag = dplyr::full_join(shlfvol.sfob, df.lag, by = join_by(year, month)) %>%
   dplyr::select(year, month, mean_cpue, mean_t, mean_s, mean_v, mean_tri, mean_sed) %>%
   tidyr::drop_na()
-shlfvol_nolag <- shlfvol_nolag[-c(11),] #removes outlier
+#shlfvol_nolag <- shlfvol_nolag[-c(11),] #removes outlier
 
                 
 lm_shlf<-lm(mean_v ~ mean_cpue, data=shlfvol_nolag)
@@ -1228,11 +1083,11 @@ summary(lm_shlf)
 
 cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_v, method=c("pearson"))
 
-ggscatter(shlfvol_nolag, x = "mean_cpue", y = "mean_v", 
+ggscatter(shlfvol_nolag, x = "mean_v", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Mean CPUE/hr", ylab = "Mean shelf water volume", title="Shelf Water Volume and CPUE Correlation")
+          xlab = "Mean shelf water volume", ylab = "Monthly mean CPUE/hr", title="Shelf Water Volume")
  
 # shelf water temperature
 lm_shlf_t<-lm(mean_t ~ mean_cpue, data=shlfvol_nolag)
@@ -1241,11 +1096,11 @@ summary(lm_shlf_t)
 
 cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_t, method=c("pearson"))
 
-ggscatter(shlfvol_nolag, x = "mean_cpue", y = "mean_t", 
+ggscatter(shlfvol_nolag, x = "mean_t", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Mean CPUE/hr", ylab = "Mean shelf water temperature", title="Shelf Water Temperature and CPUE Correlation")
+          xlab = "Mean shelf water temperature", ylab = "Monthly mean CPUE/hr", title="Shelf Water Temperature")
 
 # shelf water salinity
 lm_shlf_s<-lm(mean_s ~ mean_cpue, data=shlfvol_nolag)
@@ -1254,25 +1109,14 @@ summary(lm_shlf_s)
 
 cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_s, method=c("pearson"))
 
-ggscatter(shlfvol_nolag, x = "mean_cpue", y = "mean_s", 
+ggscatter(shlfvol_nolag, x = "mean_s", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Mean CPUE/hr", ylab = "Mean shelf water salinity", title="Shelf Water Salinity and CPUE Correlation")
+          xlab = "Mean shelf water salinity", ylab = "Monthly mean CPUE/hr", title="Shelf Water Salinity")
 
 ```
 
-**Shelf water volume GAM**
-
-```{r}
-#shelf vol GAM
-#shlfvol_gam <- gam(mean_cpue ~ s(mean_v), data=df.shlfvol.sfob, method="REML")
-#gam.check(shlfvol_gam)
-#summary(shlfvol_gam)
-
-#draw(shlfvol_gam, residuals=TRUE)
-
-```
 
 ##### Gulf-stream index
 
@@ -1482,7 +1326,7 @@ ggscatter(gsi_yr, x = "mean_gsi_lag3", y = "ttl_sum",
 #new df wouldn't recognize month when joining the gsi and sfob data so I did it manually 
 gsi <- read.csv(here::here('C:/Users/stephanie.owen/Documents/tilefish_indicators/data/gulf_stream_index/gsi_sfob.csv'))
 
-gsi_nozero <- filter(gsi, mean_cpue > 0, mean_cpue<20) #removes outlier
+gsi_nozero <- filter(gsi, mean_cpue > 0, mean_cpue<15) #removes outlier
 
 gsi.sfob<-mutate(gsi_nozero, pos = ifelse(GSI > 0, 'Northerly', 'Southerly'), 
          n.pos = ifelse(GSI > 0, 1, 0))
@@ -1577,18 +1421,13 @@ summary(lm_gsi)
 
 cor.test(gsi.sfob$mean_cpue, gsi.sfob$GSI, method=c("pearson"))
 
-ggscatter(gsi.sfob, x = "mean_cpue", y = "GSI", 
+ggscatter(gsi.sfob, x = "GSI", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Mean CPUE/hr", ylab = "Mean Monthly GSI")
+          xlab = "Mean Monthly GSI", ylab = "Monthly mean CPUE/hr",
+          title = "Gulf stream index")
 
-#GSI GAM
-#gsi_gam <- gam(mean_cpue ~ s(GSI), data=gsi.sfob, method="REML")
-#gam.check(gsi_gam)
-#summary(gsi_gam)
-
-#draw(gsi_gam, residuals=TRUE)
 ```
 
 #### Food availablity 
@@ -1628,7 +1467,7 @@ micro.lag <- micro %>%
          mean_micro_lag6 = lag(weighted_mean_micro,6))
 
 # filter sfob.env 
-sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<20) %>%
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<15) %>%
   group_by(year,month) %>% 
   summarise(mean_cpue = mean(cpue_hr)) 
          
@@ -1726,18 +1565,13 @@ summary(lm_micro)
 #plot(weighted_mean_micro ~ mean_cpue, data=micro.sfob, pch=1, col="dodgerblue") + abline(lm_micro)
 
 cor.test(micro.sfob$mean_cpue, micro.sfob$weighted_mean_micro, method=c("pearson"))
-ggscatter(micro.sfob, x = "mean_cpue", y = "weighted_mean_micro", 
+ggscatter(micro.sfob, x = "weighted_mean_micro", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Mean CPUE/hr", ylab = "Weighted Mean Microplankton")
+          xlab = "Weighted mean microplankton", ylab = "Monthly mean CPUE/hr",
+          title = "Microplankton")
 
-# GAM
-#micro_gam <- gam(mean_cpue ~ s(weighted_mean_micro), data=micro.sfob, method="REML")
-#gam.check(micro_gam)
-#summary(micro_gam)
-
-#draw(micro_gam, residuals=TRUE)
 ```
 
 
@@ -1765,7 +1599,7 @@ chl.lag <- chl %>%
          mean_chl_lag6 = lag(weighted_mean_chl,6))
 
 # filter sfob.env 
-sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<20) %>%
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<15) %>%
   group_by(year,month) %>% 
   summarise(mean_cpue = mean(cpue_hr)) 
          
@@ -1863,23 +1697,13 @@ summary(lm_chl)
 #plot(weighted_mean_chl ~ mean_cpue, data=chl.sfob, pch=1, col="dodgerblue") + abline(lm_chl)
 
 cor.test(chl.sfob$mean_cpue, chl.sfob$weighted_mean_chl, method=c("pearson"))
-ggscatter(chl.sfob, x = "mean_cpue", y = "weighted_mean_chl", 
+ggscatter(chl.sfob, x = "weighted_mean_chl", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Mean CPUE/hr", ylab = "Mean Monthly CHL-a")
+          xlab = "Weighted mean CHL-a", ylab = "Monthly mean CPUE/hr",
+          title = "CHL-a")
 ```
-**CHL-a GAM**
-
-```{r}
-#chl_gam <- gam(mean_cpue ~ s(weighted_mean_chl), data=chl.sfob, method="REML")
-#gam.check(chl_gam)
-#summary(chl_gam)
-
-#draw(chl_gam, residuals=TRUE)
-```
-
-
 
 ##### SST Fronts
 
