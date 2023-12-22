@@ -1299,11 +1299,12 @@ df <- dplyr::full_join(recruit, gsi.m %>%
   mutate(mean_gsi_lag1 = lag(m.gsi,1),
          mean_gsi_lag2 = lag(m.gsi,2),
          mean_gsi_lag3 = lag(m.gsi,3),
-         mean_gsi_lag5 = lag(m.gsi,5),
+         mean_gsi_lag6 = lag(m.gsi,6),
          mean_gsi_lag7 = lag(m.gsi,7)) %>%
   mutate(pos = ifelse(m.gsi > 0, 'Northerly', 'Southerly'), 
          n.pos = ifelse(m.gsi > 0, 1, 0))
 gsi_df <- df[-c(51:69),] 
+gsi_df <- gsi_df[-c(13),] # removes recruitment outlier
 
 ## No lag
 lm_rec_gsi<-lm(m.gsi ~ recruit_est, data=gsi_df)
@@ -1311,11 +1312,12 @@ summary(lm_rec_gsi)
 
 cor.test(gsi_df$recruit_est, gsi_df$m.gsi, method=c("pearson"))
 
-ggscatter(gsi_df, x = "recruit_est", y = "m.gsi", 
+ggscatter(gsi_df, x = "m.gsi", y = "recruit_est",
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI")
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment No Lag")
 
 
 ## 1 year lag
@@ -1324,12 +1326,12 @@ summary(lm_rec_gsi1)
 
 cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag1, method=c("pearson"))
 
-ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag1", 
+ggscatter(gsi_df, x = "mean_gsi_lag1", y = "recruit_est",
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
-          title = "GSI 1 year lag")
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment 1 Year Lag")
 
 
 ## 2 year lag
@@ -1338,12 +1340,12 @@ summary(lm_rec_gsi2)
 
 cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag2, method=c("pearson"))
 
-ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag2", 
+ggscatter(gsi_df, x = "mean_gsi_lag2", y = "recruit_est",
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
-          title = "GSI 2 year lag")
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment 2 Year Lag")
 
 ## 3 year lag
 lm_rec_gsi3<-lm(mean_gsi_lag3 ~ recruit_est, data=gsi_df)
@@ -1351,26 +1353,26 @@ summary(lm_rec_gsi3)
 
 cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag3, method=c("pearson"))
 
-ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag3", 
+ggscatter(gsi_df, x = "mean_gsi_lag3", y = "recruit_est",
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
-          title = "GSI 3 year lag")
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment 3 Year Lag")
 
 
-## 5 year lag
-lm_rec_gsi5<-lm(mean_gsi_lag5 ~ recruit_est, data=gsi_df)
-summary(lm_rec_gsi5)
+## 6 year lag
+lm_rec_gsi6<-lm(mean_gsi_lag6 ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi6)
 
-cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag5, method=c("pearson"))
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag6, method=c("pearson"))
 
-ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag5", 
+ggscatter(gsi_df, x = "mean_gsi_lag6", y = "recruit_est",
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
-          title = "GSI 5 year lag")
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment 6 Year Lag")
 
 ## 7 year lag
 lm_rec_gsi7<-lm(mean_gsi_lag7 ~ recruit_est, data=gsi_df)
@@ -1378,12 +1380,12 @@ summary(lm_rec_gsi7)
 
 cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag7, method=c("pearson"))
 
-ggscatter(gsi_df, x = "recruit_est", y = "mean_gsi_lag7", 
+ggscatter(gsi_df, x = "mean_gsi_lag7", y = "recruit_est",
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Recruitment estimate", ylab = "Mean Yearly GSI",
-          title = "GSI 7 year lag")
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment 7 Year Lag")
 
 ```
 
@@ -1410,12 +1412,12 @@ summary(lm_cpue_gsi)
 
 cor.test(gsi_yr$ttl_sum, gsi_yr$m.gsi, method=c("pearson"))
 
-ggscatter(gsi_yr, x = "ttl_sum", y = "m.gsi", 
+ggscatter(gsi_yr, x = "m.gsi", y = "ttl_sum",
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Total CPUE/yr", ylab = "Mean Yearly GSI",
-          title="GSI no lag")
+          xlab = "Mean Yearly GSI", ylab = "Total CPUE/year",
+          title = "SFOB CPUE No Lag")
 
 
 ## 1 year lag
@@ -1424,12 +1426,12 @@ summary(lm_cpue_gsi1)
 
 cor.test(gsi_yr$ttl_sum, gsi_yr$mean_gsi_lag1, method=c("pearson"))
 
-ggscatter(gsi_yr, x = "ttl_sum", y = "mean_gsi_lag1", 
+ggscatter(gsi_yr, x = "mean_gsi_lag1", y = "ttl_sum",
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Total CPUE/yr", ylab = "Mean Yearly GSI",
-          title="GSI 1 year lag")
+          xlab = "Mean Yearly GSI", ylab = "Total CPUE/year",
+          title = "SFOB CPUE 1 Year Lag")
 
 
 ## 2 year lag
@@ -1438,12 +1440,12 @@ summary(lm_cpue_gsi2)
 
 cor.test(gsi_yr$ttl_sum, gsi_yr$mean_gsi_lag2, method=c("pearson"))
 
-ggscatter(gsi_yr, x = "ttl_sum", y = "mean_gsi_lag2", 
+ggscatter(gsi_yr, x = "mean_gsi_lag2", y = "ttl_sum",
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Total CPUE/yr", ylab = "Mean Yearly GSI",
-          title="GSI 2 year lag")
+          xlab = "Mean Yearly GSI", ylab = "Total CPUE/year",
+          title = "SFOB CPUE 2 Year Lag")
 
 
 ## 3 year lag
@@ -1452,12 +1454,12 @@ summary(lm_cpue_gsi3)
 
 cor.test(gsi_yr$ttl_sum, gsi_yr$mean_gsi_lag3, method=c("pearson"))
 
-ggscatter(gsi_yr, x = "ttl_sum", y = "mean_gsi_lag3", 
+ggscatter(gsi_yr, x = "mean_gsi_lag3", y = "ttl_sum",
           add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.coeff.args = list(method="pearson", label.x=10, label.y=-1.0),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
-          xlab = "Total CPUE/yr", ylab = "Mean Yearly GSI",
-          title="GSI 3 year lag")
+          xlab = "Mean Yearly GSI", ylab = "Total CPUE/year",
+          title = "SFOB CPUE 3 Year Lag")
 
 
 ```
