@@ -977,7 +977,7 @@ df %>% group_by(year, season, strong_year_class) %>%
 
 ## 3 month lag (winter)
 
-df %>% group_by(year, season, strong_year_class) %>% 
+df %>% group_by(year, strong_year_class) %>% 
   summarize(v = mean(v_lag3),
             r = mean(recruit_est)) %>% 
   ggscatter(x = "v", y = "r", 
@@ -986,11 +986,11 @@ df %>% group_by(year, season, strong_year_class) %>%
             cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
             add.params=list(color="dodgerblue", fill="lightgray"),
             xlab = "Mean shelf water volume", ylab = "Recruitment Estimate",
-            title="3 month lag - Winter")
+            title="3 month lag")
 
-## 6 month lag (winter)
+## 6 month lag
 
-df %>% group_by(year, season, strong_year_class) %>% 
+df %>% group_by(year, strong_year_class) %>% 
   summarize(v = mean(v_lag6),
             r = mean(recruit_est)) %>% 
   ggscatter(x = "v", y = "r", 
@@ -999,11 +999,11 @@ df %>% group_by(year, season, strong_year_class) %>%
             cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
             add.params=list(color="dodgerblue", fill="lightgray"),
             xlab = "Mean shelf water volume", ylab = "Recruitment Estimate",
-            title="6 month lag - Winter")
+            title="6 month lag")
 
-## 9 month lag (winter)
+## 9 month lag
 
-df %>% group_by(year, season, strong_year_class) %>% 
+df %>% group_by(year, strong_year_class) %>% 
   summarize(v = mean(v_lag9),
             r = mean(recruit_est)) %>% 
   ggscatter(x = "v", y = "r", 
@@ -1012,11 +1012,11 @@ df %>% group_by(year, season, strong_year_class) %>%
             cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
             add.params=list(color="dodgerblue", fill="lightgray"),
             xlab = "Mean shelf water volume", ylab = "Recruitment Estimate",
-            title="9 month lag - Winter")
+            title="9 month lag")
 
-## 12 month lag (winter)
+## 12 month lag
 
-df %>% group_by(year, season, strong_year_class) %>% 
+df %>% group_by(year, strong_year_class) %>% 
   summarize(v = mean(v_lag12),
             r = mean(recruit_est)) %>% 
   ggscatter(x = "v", y = "r", 
@@ -1025,7 +1025,7 @@ df %>% group_by(year, season, strong_year_class) %>%
             cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
             add.params=list(color="dodgerblue", fill="lightgray"),
             xlab = "Mean shelf water volume", ylab = "Recruitment Estimate",
-            title="12 month lag - Winter")
+            title="12 month lag")
 ```
 
 
