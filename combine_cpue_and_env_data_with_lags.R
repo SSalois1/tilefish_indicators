@@ -15,7 +15,7 @@ df = sfob.env %>% filter(year > 2006 & depth > 50 & cpue_hr > 0 & cpue_hr < 15) 
             sd_bs = sd(btm_sal),
             mean_tri = mean(tri),
             mean_sed = mean(sed),
-            mean_cpue = mean(cpue_hr)) 
+            total_cpue = sum(cpue_hr)) 
 # Need to do annual lags because not all months are present each year
 df2 <- df %>% 
 group_by(year) %>%
@@ -26,8 +26,9 @@ group_by(year) %>%
          bs_lag3 = lag(ann_bs,3),
          bs_lag4 = lag(ann_bs,4))
 df_full <- dplyr::full_join(df, df2, by = join_by(year))
+## bt, bs - annual 
 
-## sst 
+## sst - monthly 
 sst <- sst %>% 
   arrange(year,month)
 
@@ -38,7 +39,7 @@ sst.lag <- sst %>%
          mean_sst_lag3 = lag(weighted_mean_sst,36),
          mean_sst_lag4 = lag(weighted_mean_sst,48))
 
-# Shelf water volume
+# Shelf water volume - annual 
 shlfvol <- read.csv(here::here('data/shelf_water_volume/ShelfWaterVolume_BSB_update.csv'))
 
 # wrangling date info, converting doy to date and month 
@@ -69,7 +70,7 @@ shlfvol2 = shlfvol %>%
          shw_t_lag3 = lag(mean_shw_t,3),
          shw_t_lag4 = lag(mean_shw_t,4))
 
-# gulf stream index 
+# gulf stream index - monthly 
 gsi.m <- read.csv(here::here('data/gulf_stream_index/mm_gsi_1954_2022_chen.csv'))
 gsi <- gsi.m %>%  
   arrange(year,month) %>% 
@@ -83,7 +84,7 @@ gsi <- gsi.m %>%
 #          n.pos = ifelse(m.gsi > 0, 1, 0))
 
 
-# microplankton
+# microplankton - monthly 
 micro <-read.csv(here::here('data/phyto_size_class/microplankton_ts_gtf_strata.csv'))
 micro2 <- micro %>%  
   arrange(year,month) %>% 
@@ -91,7 +92,7 @@ micro2 <- micro %>%
          micro_lag4 = lag(weighted_mean_micro,48)) %>% 
   dplyr::select(year,month, weighted_mean_micro, micro_lag3, micro_lag4)
 
-# cold pool 
+# cold pool - annual 
 cp <- ecodata::cold_pool
 # Selecting just the extent
 cp.ex <- cp %>% filter(Time %in% c(1994:2020), 
@@ -130,6 +131,62 @@ cp.ex.sfob <- dplyr::full_join(micro.sfob, cp.ex, by = join_by(year)) %>%
 cp.pers.sfob <- dplyr::full_join(cp.ex.sfob, cp.pers, by = join_by(year)) %>% 
   dplyr::select(everything())
 
-write.csv(cp.pers.sfob, 'gtf_sfob_cpue_env_with_lags.csv')
+write.csv(cp.pers.sfob, 'gtf_sfob_cpue_env_with_lags_full.csv', row.names = FALSE)
+
+# Join MONTHLY environmental data with sf/ob data
+
+df = sfob.env %>% filter(year > 2006 & depth > 50 & cpue_hr > 0 & cpue_hr < 15) %>%
+  arrange(year,month) %>% 
+  group_by(year,month) %>% 
+  summarise(mean_dpth = mean(depth),
+            mean_bt = mean(bottomt),
+            min_bt = min(bottomt),
+            max_bt = max(bottomt),
+            sd_bt = sd(bottomt),
+            mean_bs = mean(btm_sal), 
+            min_bs = min(btm_sal),
+            max_bs = max(btm_sal),
+            sd_bs = sd(btm_sal),
+            mean_tri = mean(tri),
+            mean_sed = mean(sed),
+            total_cpue = sum(cpue_hr)) 
 
 
+sst.sfob <- dplyr::full_join(sst.lag, df, by = join_by(year, month)) %>% 
+  dplyr::select(everything())
+gsi.sfob <- dplyr::full_join(sst.sfob, gsi, by = join_by(year, month)) %>% 
+  dplyr::select(everything())
+micro.sfob <- dplyr::full_join(gsi.sfob, micro2, by = join_by(year, month)) %>% 
+  dplyr::select(everything())
+
+write.csv(micro.sfob, 'gtf_sfob_cpue_env_with_lags_monthly.csv', row.names = FALSE)
+
+# JOIN ANNUAL
+
+df = sfob.env %>% filter(year > 2006 & depth > 50 & cpue_hr > 0 & cpue_hr < 15) %>%
+  group_by(year) %>% 
+  summarise(mean_dpth = mean(depth),
+            mean_bt = mean(bottomt),
+            min_bt = min(bottomt),
+            max_bt = max(bottomt),
+            sd_bt = sd(bottomt),
+            mean_bs = mean(btm_sal), 
+            min_bs = min(btm_sal),
+            max_bs = max(btm_sal),
+            sd_bs = sd(btm_sal),
+            mean_tri = mean(tri),
+            mean_sed = mean(sed),
+            total_cpue = sum(cpue_hr)) %>% 
+  mutate(bt_lag3 = lag(mean_bt,3),
+         bt_lag4 = lag(mean_bt,4),
+         bs_lag3 = lag(mean_bs,3),
+         bs_lag4 = lag(mean_bs,4))
+
+swv.sfob <-  dplyr::full_join(shlfvol2, df, by = join_by(year)) %>% 
+  dplyr::select(everything())
+cp.ex.sfob <- dplyr::full_join(swv.sfob, cp.ex, by = join_by(year)) %>% 
+  dplyr::select(everything())
+cp.pers.sfob <- dplyr::full_join(cp.ex.sfob, cp.pers, by = join_by(year)) %>% 
+  dplyr::select(everything())
+
+write.csv(cp.pers.sfob, 'gtf_sfob_cpue_env_with_lags_annual.csv', row.names = FALSE)
