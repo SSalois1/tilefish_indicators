@@ -1466,7 +1466,7 @@ ggplot(data = gsi.sfob,
 
 ```
 
-**Correlations and GAM**
+**Correlations**
 
 ```{r}
 #correlations gsi and cpue
@@ -1616,7 +1616,7 @@ ggplot2::ggplot(micro.sfob,
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ```
-**Micro correlation and GAM**
+**Micro correlation**
 
 ```{r}
 # Correlation and plot
@@ -1872,11 +1872,9 @@ ggplot2::ggplot(fprob.sfob %>% filter(season == "fall"),
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 
-## Correlation and GAM
+## Correlation 
 lm_fprob<-lm(mean_cpue ~ weighted_mean_fprob, data=fprob.sfob)
 summary(lm_fprob)
-
-#plot(weighted_mean_fprob ~ mean_cpue, data=fprob.sfob, pch=1, col="dodgerblue") + abline(lm_fprob)
 
 cor.test(fprob.sfob$mean_cpue, fprob.sfob$weighted_mean_fprob, method=c("pearson"))
 ggscatter(fprob.sfob, x = "mean_cpue", y = "weighted_mean_fprob", 
@@ -1884,12 +1882,6 @@ ggscatter(fprob.sfob, x = "mean_cpue", y = "weighted_mean_fprob",
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean CPUE/hr", ylab = "Mean Seasonal SST Frontal probability")
-
-#fprob_gam <- gam(mean_cpue ~ s(weighted_mean_fprob), data=fprob.sfob, method="REML")
-#gam.check(fprob_gam)
-#summary(fprob_gam)
-
-#draw(fprob_gam, residuals=TRUE)
 
 ```
 
