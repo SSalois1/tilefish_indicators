@@ -66,7 +66,8 @@ sfob.env <- sfobs %>%
   mutate(YEAR = as.integer(YEAR)) %>% 
   rename_all(., .funs = tolower)
 
-#write.csv(sfob.env, "C:/Users/stephanie.owen/Documents/tilefish_indicators/data/catch_data/sfob_env.csv", row.names=FALSE)
+sort(unique(sfob.env$month))
+hist(sfob.env$month)
 
 
 areas <- sort(unique(sfob.env$area))
@@ -351,22 +352,31 @@ ggplot2::ggplot(sst.sfob,
   stat_cor(aes(label=..rr.label..)) +
   theme_bw()
 ```
-**SST Correlation and GAM**
+
+**SST Correlation**
 
 ```{r}
 # Correlation and plot
 lm_sst<-lm(weighted_mean_sst ~ mean_cpue, data=sst.sfob)
 summary(lm_sst)
 
-#plot(weighted_mean_sst ~ mean_cpue, data=sst.sfob, pch=1, col="dodgerblue") + abline(lm_sst)
+sst.sfob = sst.sfob %>%
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
 
 cor.test(sst.sfob$mean_cpue, sst.sfob$weighted_mean_sst, method=c("pearson"))
+
+
 ggscatter(sst.sfob, x = "weighted_mean_sst", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
+          color ="season", palette = c("Spectral"),
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Weighted Mean SST", ylab = "Monthly Mean CPUE/hr",
           title = "Sea Surface Temperature")
+
 
 ```
 
@@ -634,18 +644,56 @@ ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(10,11,12)),
 ```{r}
 lm_bt<-lm(mean_bt ~ mean_cpue, data=df.lag.sfob)
 summary(lm_bt)
-#plot(mean_bt ~ mean_cpue, data=df.lag.sfob, pch=1, col="dodgerblue") + abline(lm_bt)
+
+df.lag.sfob = df.lag.sfob %>%
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
 
 cor.test(df.lag.sfob$mean_cpue, df.lag.sfob$mean_bt, method=c("pearson"))
 
 ggscatter(df.lag.sfob, x = "mean_bt", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
+          color ="season", palette = c("Spectral"),
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean bottom temp (°C)", ylab = "Monthly Mean CPUE/hr",
           title = "In-situ Bottom Temperature")
 
+cor.test(sst.sfob$mean_cpue, sst.sfob$weighted_mean_sst, method=c("pearson"))
 
+```
+
+**Correlation for sf/ob and GLORYS bt**
+
+```{r}
+#filter by year, depth, cpue, mean_temp_c
+glorys.bt = sfob.env %>% filter(mean_temp_c > 0, depth > 50 & cpue_hr > 0 & cpue_hr < 15) %>%
+  group_by(year,month) %>% 
+  summarise(mean_tri = mean(tri),
+            mean_sed = mean(sed),
+            mean_cpue = mean(cpue_hr),
+            mean_glorysbt = mean(mean_temp_c))
+
+# Correlation and plot
+lm_glorys<-lm(mean_glorysbt ~ mean_cpue, data=glorys.bt)
+summary(lm_glorys)
+
+glorys.bt = glorys.bt %>%
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+cor.test(glorys.bt$mean_cpue, glorys.bt$mean_glorysbt, method=c("pearson"))
+ggscatter(glorys.bt, x = "mean_glorysbt", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          color ="season", palette = c("Spectral"),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Monthly Mean GLORYS Bottom Temperature", ylab = "Monthly Mean CPUE/hr",
+          title = "GLORYS Bottom Temperature")
 ```
 
 
@@ -1070,6 +1118,7 @@ ggplot2::ggplot(df.shlfvol.sfob,
 **Correlations between sf/ob data and shelf water volume/temp/salinity**
 
 ```{r}
+#shelf water volume
 
 shlfvol_nolag = dplyr::full_join(shlfvol.sfob, df.lag, by = join_by(year, month)) %>%
   dplyr::select(year, month, mean_cpue, mean_t, mean_s, mean_v, mean_tri, mean_sed) %>%
@@ -1079,12 +1128,18 @@ shlfvol_nolag = dplyr::full_join(shlfvol.sfob, df.lag, by = join_by(year, month)
                 
 lm_shlf<-lm(mean_v ~ mean_cpue, data=shlfvol_nolag)
 summary(lm_shlf)
-#plot(mean_v ~ mean_cpue, data=df.shlfvol.sfob, pch=1, col="dodgerblue") + abline(lm_shlf)
+
+shlfvol_nolag = shlfvol_nolag %>%
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
 
 cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_v, method=c("pearson"))
 
 ggscatter(shlfvol_nolag, x = "mean_v", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean shelf water volume", ylab = "Monthly mean CPUE/hr", title="Shelf Water Volume")
@@ -1092,12 +1147,12 @@ ggscatter(shlfvol_nolag, x = "mean_v", y = "mean_cpue",
 # shelf water temperature
 lm_shlf_t<-lm(mean_t ~ mean_cpue, data=shlfvol_nolag)
 summary(lm_shlf_t)
-#plot(mean_t ~ mean_cpue, data=shlfvol_nolag, pch=1, col="dodgerblue") + abline(lm_shlf_t)
 
 cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_t, method=c("pearson"))
 
 ggscatter(shlfvol_nolag, x = "mean_t", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean shelf water temperature", ylab = "Monthly mean CPUE/hr", title="Shelf Water Temperature")
@@ -1105,12 +1160,12 @@ ggscatter(shlfvol_nolag, x = "mean_t", y = "mean_cpue",
 # shelf water salinity
 lm_shlf_s<-lm(mean_s ~ mean_cpue, data=shlfvol_nolag)
 summary(lm_shlf_s)
-#plot(mean_s ~ mean_cpue, data=shlfvol_nolag, pch=1, col="dodgerblue") + abline(lm_shlf_s)
 
 cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_s, method=c("pearson"))
 
 ggscatter(shlfvol_nolag, x = "mean_s", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean shelf water salinity", ylab = "Monthly mean CPUE/hr", title="Shelf Water Salinity")
@@ -1417,12 +1472,18 @@ ggplot(data = gsi.sfob,
 #correlations gsi and cpue
 lm_gsi<-lm(GSI ~ mean_cpue, data=gsi.sfob)
 summary(lm_gsi)
-#plot(GSI ~ mean_cpue, data=gsi.sfob, pch=1, col="dodgerblue") + abline(lm_gsi)
+
+gsi.sfob = gsi.sfob %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
 
 cor.test(gsi.sfob$mean_cpue, gsi.sfob$GSI, method=c("pearson"))
 
 ggscatter(gsi.sfob, x = "GSI", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Mean Monthly GSI", ylab = "Monthly mean CPUE/hr",
@@ -1562,11 +1623,16 @@ ggplot2::ggplot(micro.sfob,
 lm_micro<-lm(weighted_mean_micro ~ mean_cpue, data=micro.sfob)
 summary(lm_micro)
 
-#plot(weighted_mean_micro ~ mean_cpue, data=micro.sfob, pch=1, col="dodgerblue") + abline(lm_micro)
+micro.sfob = micro.sfob %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
 
 cor.test(micro.sfob$mean_cpue, micro.sfob$weighted_mean_micro, method=c("pearson"))
 ggscatter(micro.sfob, x = "weighted_mean_micro", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Weighted mean microplankton", ylab = "Monthly mean CPUE/hr",
@@ -1694,11 +1760,16 @@ ggplot2::ggplot(chl.sfob,
 lm_chl<-lm(weighted_mean_chl ~ mean_cpue, data=chl.sfob)
 summary(lm_chl)
 
-#plot(weighted_mean_chl ~ mean_cpue, data=chl.sfob, pch=1, col="dodgerblue") + abline(lm_chl)
+chl.sfob = chl.sfob %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
 
 cor.test(chl.sfob$mean_cpue, chl.sfob$weighted_mean_chl, method=c("pearson"))
 ggscatter(chl.sfob, x = "weighted_mean_chl", y = "mean_cpue", 
           add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
           cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
           add.params=list(color="dodgerblue", fill="lightgray"),
           xlab = "Weighted mean CHL-a", ylab = "Monthly mean CPUE/hr",
