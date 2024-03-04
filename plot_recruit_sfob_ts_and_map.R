@@ -7,6 +7,7 @@ library(shadowtext)
 library(ggnewscale)
 library(wesanderson)
 library(ggspatial)
+library(RColorBrewer)
 
 #%>% st_transform(., "+proj=longlat +datum=NAD83 +no_defs")
 ## Bathy and ports
