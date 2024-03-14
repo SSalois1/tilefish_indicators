@@ -1,0 +1,265 @@
+---
+title: "SFOB Lags"
+output: 
+  html_document:
+    code_fold: hide
+    toc: true
+    toc_depth: 5
+    toc_float: true
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(RColorBrewer)
+library(ggpubr)
+
+```
+
+## Annual lags
+
+3 year lag = recruit year (age 1)
+4 year lag = birth year (age 0)
+
+```{r}
+ann <- read.csv(here::here('data/gtf_sfob_cpue_env_with_lags_annual.csv'))
+
+ann <- ann %>%
+  filter(year %in% (1998:2022))
+```
+
+### Shelf water volume
+
+```{r}
+
+# 3 year lag
+ggscatter(ann, x = "shw_v_lag3", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Annual Shelf Water Volume", ylab = "Total Annual CPUE",
+          title = "Shelf Water Volume - 3 year lag")
+
+# 4 year lag
+ggscatter(ann, x = "shw_v_lag4", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Annual Shelf Water Volume", ylab = "Total Annual CPUE",
+          title = "Shelf Water Volume - 4 year lag")
+```
+
+#### Shelf water temperature
+
+```{r}
+# 3 year lag
+ggscatter(ann, x = "shw_t_lag3", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Annual Shelf Water Temperature", ylab = "Total Annual CPUE",
+          title = "Shelf Water Temperature - 3 year lag")
+
+# 4 year lag
+ggscatter(ann, x = "shw_t_lag4", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Annual Shelf Water Temperature", ylab = "Total Annual CPUE",
+          title = "Shelf Water Temperature - 4 year lag")
+```
+
+#### Shelf water salinity
+
+```{r}
+# 3 year lag
+ggscatter(ann, x = "shw_s_lag3", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Annual Shelf Water Salinity", ylab = "Total Annual CPUE",
+          title = "Shelf Water Salinity - 3 year lag")
+
+# 4 year lag
+ggscatter(ann, x = "shw_s_lag4", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Annual Shelf Water Salinity", ylab = "Total Annual CPUE",
+          title = "Shelf Water Salinity - 4 year lag")
+```
+
+### Bottom Temperature
+
+```{r}
+# 3 year lag
+ggscatter(ann, x = "bt_lag3", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Annual Bottom Water Temperature", ylab = "Total Annual CPUE",
+          title = "In-situ bottom water temperature - 3 year lag")
+
+# 4 year lag
+ggscatter(ann, x = "bt_lag4", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Annual Bottom Water Temperature", ylab = "Total Annual CPUE",
+          title = "In-situ bottom water temperature - 4 year lag")
+```
+
+### Bottom salinity
+
+```{r}
+# 3 year lag
+ggscatter(ann, x = "bs_lag3", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Annual Bottom Salinity", ylab = "Total Annual CPUE",
+          title = "Bottom Salinity - 3 year lag")
+
+# 4 year lag
+ggscatter(ann, x = "bs_lag4", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Annual Bottom Salinity", ylab = "Total Annual CPUE",
+          title = "Bottom Salinity - 4 year lag")
+```
+
+### Cold pool
+
+#### Cold pool extent
+
+```{r}
+# 3 year lag
+ggscatter(ann, x = "cp_ext_lag3", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Annual Cold Pool Extent", ylab = "Total Annual CPUE",
+          title = "Cold Pool Extent - 3 year lag")
+
+# 4 year lag
+ggscatter(ann, x = "cp_ext_lag4", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Annual Cold Pool Extent", ylab = "Total Annual CPUE",
+          title = "Cold Pool Extent - 4 year lag")
+```
+
+#### Cold pool persistence
+
+```{r}
+# 3 year lag
+ggscatter(ann, x = "cp_pers_lag3", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Annual Cold Pool Persistence", ylab = "Total Annual CPUE",
+          title = "Cold Pool Persistence - 3 year lag")
+
+# 4 year lag
+ggscatter(ann, x = "cp_pers_lag4", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Annual Cold Pool Persistence", ylab = "Total Annual CPUE",
+          title = "Cold Pool Persistence - 4 year lag")
+```
+
+## Monthly lags
+
+```{r}
+month <- read.csv(here::here('data/gtf_sfob_cpue_env_with_lags_monthly.csv'))
+
+month <-month %>%
+  filter(year %in% (1998:2022)) %>%
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+month <- month[-c(216),]
+```
+
+### SST
+
+```{r}
+
+# 3 year lag
+month %>% group_by(year, season) %>% 
+ ggscatter(x = "mean_sst_lag3", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Weighted Mean SST", ylab = "Monthly Mean CPUE/hr",
+          title = "Sea Surface Temperature - 3 year lag")+
+  facet_wrap(~season, scales = 'free')
+
+# 4 year lag
+month %>% group_by(year, season) %>% 
+ ggscatter(x = "mean_sst_lag4", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Weighted Mean SST", ylab = "Monthly Total CPUE/hr",
+          title = "Sea Surface Temperature - 4 year lag")+
+  facet_wrap(~season, scales = 'free')
+```
+
+### GSI
+
+```{r}
+
+# 3 year lag
+month %>% group_by(year, season) %>% 
+ ggscatter(x = "gsi_lag3", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Gulf Stream Index", ylab = "Monthly Mean CPUE/hr",
+          title = "Gulf Stream Index - 3 year lag")+
+  facet_wrap(~season, scales = 'free')
+
+# 4 year lag
+month %>% group_by(year, season) %>% 
+ ggscatter(x = "gsi_lag4", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Gulf Stream Index", ylab = "Monthly Total CPUE/hr",
+          title = "Gulf Stream Index - 4 year lag")+
+  facet_wrap(~season, scales = 'free')
+```
+
+### Microplankton
+
+```{r}
+# 3 year lag
+month %>% group_by(year, season) %>% 
+ ggscatter(x = "micro_lag3", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Weighted Mean Monthly Microplankton", ylab = "Monthly Mean CPUE/hr",
+          title = "Microplankton - 3 year lag")+
+  facet_wrap(~season, scales = 'free')
+
+# 4 year lag
+month %>% group_by(year, season) %>% 
+ ggscatter(x = "micro_lag4", y = "total_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Weighted Mean Monthly Microplankton", ylab = "Monthly Total CPUE/hr",
+          title = "Microplankton - 4 year lag")+
+  facet_wrap(~season, scales = 'free')
+```
+
