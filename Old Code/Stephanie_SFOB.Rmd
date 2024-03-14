@@ -1,0 +1,2318 @@
+---
+title: "Environmental indicator analysis-Tilefish"
+output:  
+  html_document:
+    code_fold: hide
+    toc: true
+    toc_depth: 5
+    toc_float: true
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r, wrangling}
+
+# Loading packages and data
+library(ggplot2)
+library(ecodata)
+library(lubridate)
+library(dplyr)
+library(stringr)
+library(marmap) # bathymetry
+library(RColorBrewer)
+library(ggnewscale)
+library(sf)
+library(cowplot)
+library(tidyverse)
+library(ggpubr)
+library(sf)
+library(ggdist)
+library(ggpubr)
+library(wesanderson)
+library(raster)
+library(mgcv)
+#library(glmTMB)
+library(ggpmisc)
+library(mgcViz)
+library(gratia)
+
+# CPUE data (no env covariates)
+gt_data_model_cpue <- read.csv(here::here('data/catch_data/gt_data_model_cpue.csv'))
+#names(gt_data_model_cpue) <- tolower(names(gt_data_model_cpue))
+# Add in column with cpue 
+# note: Paul indicated to use small mesh
+gt_data_model_cpue <- gt_data_model_cpue %>% 
+       rename_all(., .funs = tolower) %>% 
+  mutate(mesh_bin = case_when(mesh_size <= 5.6 ~ 'SM',mesh_size >= 5.6 ~ 'LG',
+                                                      TRUE ~ 'NA')) %>%
+  mutate(cpue_hr = sum_gt_catch/effort_dur)
+
+# Catch data: 
+sfobs <-readRDS(here::here('data/catch_data/gold_tile_sf_ob_v1_temp_price.rds'))
+
+sfob.env <- sfobs %>% 
+  mutate(mesh_bin = case_when(mesh_size <= 5.6 ~ 'SM', mesh_size >= 5.6 ~ 'LG',
+                              TRUE ~ 'NA'),
+         cpue_hr = SUM_GT_CATCH/effort_dur) %>% 
+  filter(YEAR %in% c(1998:2022) & mesh_bin == 'SM') %>%
+  dplyr::select(DATE, YEAR, MONTH, YDAY,trip_id,hull_num, area, effort_dur, 
+         SUM_GT_CATCH, cpue_hr, mesh_size, mesh_bin, depth, start_lat, start_lon,
+         bottomT, bottomT_avg, MIN_TEMP_C, MEAN_TEMP_C, MAX_TEMP_C,
+         TEMP_VARIANCE, TEMP_DEVIATION, MEAN_DPTH_M, tri, sed) %>% 
+  mutate(YEAR = as.integer(YEAR)) %>% 
+  rename_all(., .funs = tolower)
+
+sort(unique(sfob.env$month))
+hist(sfob.env$month)
+
+
+areas <- sort(unique(sfob.env$area))
+catch.tally.ann <- sfob.env %>% # aggregate by year
+  group_by(year) %>% 
+  summarise(ttl_sum = sum(sum_gt_catch))
+
+# Length data from observer program 
+lengths <- read.csv(here::here('data/catch_data/gt_data_length_andy.csv')) 
+names(lengths) <- tolower(names(lengths))
+
+# Recruitment estimates from 2021 report
+recruit <- read.csv(here::here('data/assessment_data/tilefish_rec_estimate_2021.csv'))
+
+# Merge SF/Obs catch data with recruit estimates:
+catch_recruit <- cbind(recruit %>% filter(year %in% c(1998:2020)),
+                       catch.tally.ann %>%
+                         filter(year %in% c(1998:2020)) %>%
+                         dplyr::select(ttl_sum))
+
+# loading in shape files for maps
+wd = here::here('shapefiles')
+US.areas <- st_read(here::here('shapefiles/USA.shp'), quiet = TRUE)
+canada.areas <- st_read(here::here('shapefiles/Canada.shp'), quiet = TRUE)
+bts_strata <- st_read(here::here('shapefiles/NES_BOTTOM_TRAWL_STRATA.shp'),
+                      quiet = TRUE)
+# plot(bts_strata) # to see all bottom trawl strata
+
+gtf_strata <- bts_strata %>% 
+  filter(STRATUMA %in% c('01030', '01040', '01070', '01080', '01110', '01120', 
+                         '01140', '01150', '01670', '01680', '01710', '01720', 
+                         '01750', '01760')) # select just the gtf strata
+# plot(gtf_strata)
+bathy <- marmap::getNOAA.bathy(-81,-58, 27, 46)
+bathy = fortify.bathy(bathy)
+
+```
+
+
+
+## Tilefish data
+***
+
+### Catch data
+
+Year-class strength is broadly defined as the number of fish spawned or hatched 
+in a given year (Ricker, 1975).
+
+
+Figure 1. Sum of catch (not accounting for effort), across years. Light blue 
+shaded region represents the temporal range of observer records and red 
+shaded region represents temporal range of study fleet records. The 'purple' 
+region is where they overlap. Note that 2000-2005 for observer records had 
+low sample size/number of vessels for tilefish, making the shaded region likely 
+the best region to use for analysis. The vertical dashed lines represent strong
+year classes for this species (Nesslage et al. 2021). Red asterisk marks year
+that stock was deemed 're-built'.
+
+```{r, c1}
+# tot_catch == total (sum_catch) across hauls. so if tallying up annually, 
+# use sum_catch
+# Strong year-classes: 1970, 1973, 1993, 1999, 2005, 2013
+
+ggplot(catch.tally.ann, aes(x = factor(year), y = ttl_sum, group = 1))+
+   geom_rect(aes(xmin = '2007', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'red', alpha = 0.02) +
+  geom_rect(aes(xmin = '2000', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'lightblue', alpha = 0.05) +
+   geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
+  geom_line(color = 'black', size = 1.5) +
+  annotate("text", label = "*",
+    x = 26, y = 14000, size = 8, colour = "red" )+
+  xlab('Year') + 
+  ylab('Total sum tilefish catch') + 
+  # facet_wrap(~month)+
+  theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  ecodata::theme_facet()
+
+```
+
+
+#### CPUE 
+
+
+Figure 2. Catch-per-unit-effot for undirected trawl trips from the Study fleet and 
+observer program. Zeros have been added using species association methodology
+(via jaccard index). 
+
+[see here for example](https://static1.squarespace.com/static/511cdc7fe4b00307a2628ac6/t/64501a9ee391c8439cbc3c04/1682971295614/c_MRIP+Index_Drew+2022d.pdf)
+
+```{r, c2}
+gt_data_model_cpue %>% 
+  filter(mesh_bin == 'SM') %>% # note: Paul indicated to use small mesh
+  group_by(year, source) %>% 
+  summarise(mean_cpue = mean(cpue_hr),.groups = 'drop') %>%
+  ggplot(aes(x=year,y=mean_cpue)) +
+  geom_line(lwd = 1) +
+  facet_wrap(~source) + 
+  theme_bw()
+
+gt_data_model_cpue %>% 
+  filter(mesh_bin == 'SM') %>%
+  group_by(year) %>% 
+  summarise(mean_cpue = mean(cpue_hr),.groups = 'drop') %>%
+  ggplot(aes(x=year,y=mean_cpue)) +
+  geom_line(lwd = 1) +
+  labs(title = 'Study fleet + Observer combined') + 
+  theme_bw()
+
+```
+
+
+#### Maps (catch) {.tabset}
+
+Tilefish catch locations (study fleet/observer)
+
+```{r, maps, results='asis'}
+
+yrs = sort(unique(gt_data_model_cpue$year))    
+
+#for(i in 1:length(yrs)){
+yrmap <- function(yrs){
+  gt_data_model_cpue %>% 
+  filter(start_lat < 42.5 & depth_est > 50 & year == yrs) %>%
+  mutate(bin = cut(year, seq(min(year), max(year) + 4, 4), right = FALSE)) %>%
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  stat_summary_2d(aes(x=start_lon, y=start_lat, z = cpue_hr),
+                  binwidth=c(0.16666,0.16666)) + 
+  scale_fill_viridis_c() + 
+  theme(legend.position = "bottom",
+        legend.key.size = unit(0.2, "cm"),
+        legend.key.width = unit(1, "cm")) +
+  coord_sf(xlim = c(-75,-65.5), ylim = c(36,44), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'CPUE') +
+  theme_bw() 
+}
+
+
+for(i in 1:length(yrs)){
+ cat("\n#####",  as.character(yrs[i]),"\n")
+    print(yrmap(yrs[i])) 
+    cat("\n")   
+}
+
+
+```
+
+
+### Environmental data
+***
+
+The strong year classes for Golden Tilefish were 1993, 1998, 2005, 2013. 
+Some of the underlying oceanographic processes that may be related to recruitment
+may influence habitat, retention/displacement and food availablity. These are
+explored below. 
+
+
+#### Habitat
+
+Tilefish occupy a very narrow band of habitat conditions. Therefore, temperature 
+and salinity may be of interest. 
+
+##### SST
+
+```{r, c9}
+# SST
+sst<-read.csv(here::here('data/sst/sst_ts_gtf_strata.csv'))
+```
+
+##### Maps (SST) {.tabset}
+
+```{r, sst maps, results='asis'}
+
+```
+
+##### SST analysis
+
+
+```{r}
+# SST by month with lag
+sst.lag <- sst %>%
+  mutate(mean_sst_lag2 = lag(weighted_mean_sst,2),
+         mean_sst_lag3 = lag(weighted_mean_sst,3),
+         mean_sst_lag6 = lag(weighted_mean_sst,6))
+
+# filter sfob.env - removes 2002 outlier
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr >0, cpue_hr < 15) %>%
+  group_by(year,month) %>% 
+  summarise(mean_cpue = mean(cpue_hr),
+            mean_tri = mean(tri),
+            mean_sed = mean(sed)) 
+         
+# Join with sf/ob data
+sst.sfob <- dplyr::full_join(sst.lag, sfob, by = join_by(year, month)) %>%
+  dplyr::select(year, month, mean_cpue, mean_tri, mean_sed, mean_sst, weighted_mean_sst, mean_sst_lag2, mean_sst_lag3, mean_sst_lag6) %>%
+  tidyr::drop_na()
+
+
+
+## SST no lag
+ggplot2::ggplot(sst.sfob,
+                aes(x=mean_cpue, y=weighted_mean_sst)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Mean SST no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## SST summer
+ggplot2::ggplot(sst.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=weighted_mean_sst)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Summer Mean SST') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## SST spring
+ggplot2::ggplot(sst.sfob %>% filter(month %in% c(4,5,6)),
+                aes(x=mean_cpue, y=weighted_mean_sst)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Spring Mean SST') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 2 month lag
+ggplot2::ggplot(sst.sfob,
+                aes(x=mean_cpue, y=mean_sst_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Mean SST 2 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 3 month lag
+ggplot2::ggplot(sst.sfob,
+                aes(x=mean_cpue, y=mean_sst_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Mean SST 3 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 6 month lag
+ggplot2::ggplot(sst.sfob,
+                aes(x=mean_cpue, y=mean_sst_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST') +
+  labs(title = 'Mean SST 6 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+```
+
+**SST Correlation**
+
+```{r}
+# Correlation and plot
+lm_sst<-lm(weighted_mean_sst ~ mean_cpue, data=sst.sfob)
+summary(lm_sst)
+
+sst.sfob = sst.sfob %>%
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+cor.test(sst.sfob$mean_cpue, sst.sfob$weighted_mean_sst, method=c("pearson"))
+
+# all seasons, color coded
+ggscatter(sst.sfob, x = "weighted_mean_sst", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          color ="season", palette = c("Spectral"),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Weighted Mean SST", ylab = "Monthly Mean CPUE/hr",
+          title = "Sea Surface Temperature")
+
+# plot by season
+sst.sfob %>% group_by(year, season) %>%
+ ggscatter(x = "weighted_mean_sst", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Weighted Mean SST", ylab = "Monthly Mean CPUE/hr",
+          title = "Sea Surface Temperature")+
+  facet_wrap(~season, scales = 'free')
+
+
+```
+
+
+##### Bottom Temperature
+
+Figure 1. GLORYS vs in-situ bottom temperatures from study fleet vessels. 
+
+Figure 2. Bottom temperature (C) across years. Blue dots are in-situ data, red
+dots are from GLORYS. 
+
+```{r, c11}
+
+ggplot2::ggplot(sfob.env, aes(x=bottomt, y=mean_temp_c)) +
+  geom_point(color="blue", alpha=0.1)+
+  geom_abline(intercept = 0, slope = 1) +
+  xlab('Bottom Temp (SF)') +
+  ylab('Bottom Temp (GLORYS)') +
+  theme_bw() 
+
+ggplot2::ggplot(sfob.env, aes(x=bottomt, y=year)) +
+  geom_point(color="blue", alpha=0.1) +
+  geom_point(data = sfob.env, aes(x=mean_temp_c, y=year),
+             color="red", alpha=0.1) +
+  xlab('Bottom Temp') +
+  ylab('Year') +
+  labs(color = 'Source') +
+  theme_bw() 
+
+```
+
+
+##### Maps (Bottom T) {.tabset}
+
+
+```{r, maps bt, results='asis'}
+
+jet.colors <-colorRampPalette(c("blue", "#007FFF", "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+
+# select just years with study fleet bottom temps
+sf.bt <- sfob.env %>% filter(year>2006 & depth > 50) 
+yrs = sort(unique(sf.bt$year))    
+
+#for(i in 1:length(yrs)){
+yrmap <- function(yrs){
+  sf.bt %>% filter(year == yrs) %>% 
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  stat_summary_2d(aes(x=start_lon, y=start_lat, z = bottomt),
+                  binwidth=c(0.16666,0.16666)) + 
+    scale_fill_gradientn(colors = jet.colors(20)) +
+  coord_sf(xlim = c(-75,-65.5), ylim = c(36,44), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'Bottom temperature (°C)') +
+  theme_bw() 
+}
+
+
+for(i in 1:length(yrs)){
+ cat("\n######",  as.character(yrs[i]),"\n")
+    print(yrmap(yrs[i])) 
+    cat("\n")   
+}
+
+
+```
+
+
+##### Bottom T analysis
+
+The following figures compare in-situ bottom temperature from the study-fleet
+data set to the Study fleet and Observer tilefish catch data. 
+
++ Note here temperatures are averaged across all depths > 50 for each month.
+
+
+```{r}
+
+df.lag.cpue = sfob.env %>% filter(year > 2006 & depth > 50 & cpue_hr > 0 & cpue_hr < 15) %>%
+  group_by(year,month) %>% 
+  summarise(mean_dpth = mean(depth),
+            mean_bt = mean(bottomt),
+            min_bt = min(bottomt),
+            max_bt = max(bottomt),
+            sd_bt = sd(bottomt),
+            mean_tri = mean(tri),
+            mean_sed = mean(sed),
+            mean_cpue = mean(cpue_hr))
+
+# See what months have data
+sort(unique(df.lag.sfob$month))
+hist(df.lag.sfob$month)  #winter/spring and summer/fall; summer only season with any non-zero relationship, except fall with 6 mo lag
+
+## Winter/spring bottom temp no lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(1,2,3,4,5,6)),
+                aes(x=mean_cpue, y=mean_bt)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)') +
+  labs(title = 'Winter/spring no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer/fall bottom temp no lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9,10,11,12)),
+                aes(x=mean_cpue, y=mean_bt)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer/fall no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer bottom temp no lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=mean_bt)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Winter/spring bottom temp 2 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(1,2,3,4,5,6)),
+                aes(x = mean_cpue, y = mean_bt_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Winter/spring lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer/fall bottom temp 2 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9,10,11,12)),
+                aes(x = mean_cpue, y = mean_bt_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer/fall lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer bottom temp 2 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x = mean_cpue, y = mean_bt_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Winter/spring bottom temp 3 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(1,2,3,4,5,6)),
+                aes(x = mean_cpue, y = mean_bt_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Winter/spring lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer/fall bottom temp 3 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9,10,11,12)),
+                aes(x = mean_cpue, y = mean_bt_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer/fall lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer bottom temp 3 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x = mean_cpue, y = mean_bt_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer/fall bottom temp 6 month lag
+# No 6 month lag data for winter/spring
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9,10,11,12)),
+                aes(x = mean_cpue, y = mean_bt_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer/fall lag 6 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer bottom temp 6 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x = mean_cpue, y = mean_bt_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Summer lag 6 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Fall bottom temp 6 month lag
+ggplot2::ggplot(df.lag.sfob %>% filter(month %in% c(10,11,12)),
+                aes(x = mean_cpue, y = mean_bt_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Fall lag 6 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+```
+
+**Corrleation and figures for sf/ob data and in-situ bottom temps**
+
+```{r}
+lm_bt<-lm(mean_bt ~ mean_cpue, data=df.lag.sfob)
+summary(lm_bt)
+
+df.lag.sfob = df.lag.sfob %>%
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+cor.test(df.lag.sfob$mean_cpue, df.lag.sfob$mean_bt, method=c("pearson"))
+
+# all seasons, color coded by season
+ggscatter(df.lag.sfob, x = "mean_bt", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          color ="season", palette = c("Spectral"),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean bottom temp (°C)", ylab = "Monthly Mean CPUE/hr",
+          title = "In-situ Bottom Temperature")
+
+# plot by season
+df.lag.sfob %>% group_by(year, season) %>%
+ ggscatter(x = "mean_bt", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Insitu Bottom Temperature", ylab = "Monthly Mean CPUE/hr",
+          title = "Insitu BT")+
+  facet_wrap(~season, scales = 'free')
+
+```
+
+**Correlation for sf/ob and GLORYS bt**
+
+```{r}
+#filter by year, depth, cpue, mean_temp_c
+glorys.bt = sfob.env %>% filter(mean_temp_c > 0, depth > 50 & cpue_hr > 0 & cpue_hr < 15) %>%
+  group_by(year,month) %>% 
+  summarise(mean_tri = mean(tri),
+            mean_sed = mean(sed),
+            mean_cpue = mean(cpue_hr),
+            mean_glorysbt = mean(mean_temp_c))
+
+# Correlation and plot
+lm_glorys<-lm(mean_glorysbt ~ mean_cpue, data=glorys.bt)
+summary(lm_glorys)
+
+glorys.bt = glorys.bt %>%
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+cor.test(glorys.bt$mean_cpue, glorys.bt$mean_glorysbt, method=c("pearson"))
+ggscatter(glorys.bt, x = "mean_glorysbt", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          color ="season", palette = c("Spectral"),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Monthly Mean GLORYS Bottom Temperature", ylab = "Monthly Mean CPUE/hr",
+          title = "GLORYS Bottom Temperature")
+```
+
+
+##### Salinity
+
+Here we explore salinity from the GLORYS reanalysis model at three different 
+depths
+
+ + 55 meters (relevant to larvae, recruits)
+ + 110 meters (relevant recruits, juveniles)
+ + 220 meters (relevant to juveniles, adults)
+
+```{r, c14}
+# Salinity 
+
+```
+
+##### Maps (Salinity) {.tabset}
+
+
+```{r, maps sal, results='asis'}
+
+jet.colors <-colorRampPalette(c("blue", "#007FFF", "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+
+# b <- brick(here::here('data/salinity/dd_sal_55_2000_2009.tif'))
+# b.00 <- b[,,,1:365]
+
+# select just years with study fleet bottom temps
+sf.bt <- sfob.env %>% filter(year>2006 & depth > 50) 
+yrs = sort(unique(sf.bt$year))    
+
+#for(i in 1:length(yrs)){
+yrmap <- function(yrs){
+  sf.bt %>% filter(year == yrs) %>% 
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  # stat_summary_2d(aes(x=start_lon, y=start_lat, z = bottomt),
+  #                 binwidth=c(0.16666,0.16666)) + 
+  #   scale_fill_gradientn(colors = jet.colors(20)) +
+  coord_sf(xlim = c(-75,-65.5), ylim = c(36,44), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'Salinty') +
+  theme_bw() 
+}
+
+
+for(i in 1:length(yrs)){
+ cat("\n######",  as.character(yrs[i]),"\n")
+    print(yrmap(yrs[i])) 
+    cat("\n")   
+}
+
+
+```
+
+##### Salinity analysis
+
+```{r}
+sal <- read.csv(here::here("data/study_fleet_obs_env.csv"))
+
+sal = sal %>% filter(year > 1997 & depth > 50 & cpue_hr > 0 & cpue_hr < 15) %>%
+  group_by(year,month) %>% 
+  summarise(mean_sal = mean(btm_sal),
+            mean_tri = mean(tri),
+            mean_sed = mean(sed),
+            mean_cpue = mean(cpue_hr)) %>%
+   tidyr::drop_na()
+
+sal = sal %>%
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+
+# all seasons, color coded by season
+ggscatter(sal, x = "mean_sal", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          color ="season", palette = c("Spectral"),
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Salinity", ylab = "Monthly Mean CPUE/hr",
+          title = "Salinity")
+
+# plot by season
+sal %>% group_by(year, season) %>%
+ ggscatter(x = "mean_sal", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Salinity", ylab = "Monthly Mean CPUE/hr",
+          title = "Salinity")+
+  facet_wrap(~season, scales = 'free')
+```
+
+
+
+#### Currents
+
+Cross-shelf processes may influence the retention or displacement of tilefish 
+during early life history stages. These are explored below.
+
+##### Shelf water volume
+
+Shelf water volume: A measure of the volume of water bounded inshore of the
+shelf-slope front. In this analysis, shelf water is defined as all water having 
+salinity <34 psu. The position of the shelf-slope front varies inter-annually
+with the higher shelf water values indicating the front being pushed further 
+towards the shelf break.
+
+high shv: front pushed towards sbf
+low shv: front pushed inshore (more slope water on shelf)
+
+Hypothesis: Higher recruitment success correlated with years of higher shelf 
+water volume in spring/summer. These months months may be particularly 
+important as that is when spawning is occurring and the position of the sbf
+may influence the position of larvae (away from spawning grounds).
+
+Additional variables in this dataset are shelf water temperature and salinity 
+which may also be indicative of habitat conditions. 
+
+
+```{r, s.w.volume}
+
+# Shelf water volume
+shlfvol <- read.csv(here::here('data/shelf_water_volume/ShelfWaterVolume_BSB_update.csv'))
+
+# wrangling date info, converting doy to date and month 
+yrs <- as.vector(nrow(shlfvol))
+shlfvol$Year <- as.character(shlfvol$Year)
+for (i in 1:nrow(shlfvol)){
+  yrs[i] <- strsplit(shlfvol$Year, ".", fixed = TRUE)[[i]][1]
+}
+shlfvol$year <- yrs
+shlfvol <- shlfvol %>% mutate(date_= as.Date(Year.Day-1, 
+                                             origin=paste0(year, "-01-01")), 
+                              month= strftime(date_, "%m"), 
+                              day=strftime(date_,"%d"), 
+                              year = as.integer(year),
+                              month = as.numeric(month))  
+
+```
+
+**Shelf water volume with Study fleet/Observer data**
+
+```{r}
+# Create shw vol by month w/lag
+df.lag = shlfvol %>%
+  filter(year > 1997) %>%
+  group_by(year,month) %>%
+  summarise(mean_t = mean(ShW.T),
+            mean_s = mean(ShW.S),
+            mean_v = mean(ShW.Vol)) %>%
+  mutate(mean_t_lag2 = lag(mean_t,2),
+         mean_t_lag3 = lag(mean_t,3),
+         mean_s_lag2 = lag(mean_s,2),
+         mean_s_lag3 = lag(mean_s,3),
+         mean_v_lag2 = lag(mean_v,2),
+         mean_v_lag3 = lag(mean_v,3))
+
+#filter sfob.env 
+shlfvol.sfob = sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<15) %>%
+  group_by(year,month) %>% 
+  summarise(mean_dpth = mean(depth),
+            mean_bt = mean(bottomt),
+            mean_cpue = mean(cpue_hr),
+            mean_tri = mean(tri),
+            mean_sed = mean(sed))
+
+# Join with sf/ob data
+df.shlfvol.sfob = dplyr::full_join(shlfvol.sfob, df.lag, by = join_by(year, month)) %>%
+  dplyr::select(year, month, mean_cpue, mean_tri, mean_sed, mean_t, mean_s, mean_v,
+                mean_t_lag2, mean_v_lag2, mean_s_lag2,
+                mean_t_lag3, mean_v_lag3, mean_s_lag3) %>%
+  tidyr::drop_na()
+
+#See what months have data
+sort(unique(df.shlfvol.sfob$month))
+hist(df.shlfvol.sfob$month) #summer and fall
+```
+
+**No lags**
+
+```{r}
+## Shelf water volume no lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_v)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume summer
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=mean_v)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume summer') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume fall
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(10,11,12)),
+                aes(x=mean_cpue, y=mean_v)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume fall') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water temp no lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_t)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water salinity no lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_s)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(year >2007 & month %in% c(7,8,9,10,11,12)),
+                aes(x=mean_cpue, y=mean_v)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  labs(title = 'SFOB x M.S.W Summer/Fall (2007:2021)') +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(year >2007 & month %in% c(7,8,9,10,11,12)),
+                aes(x=mean_cpue, y=mean_s)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  labs(title = 'SFOB x M.S.W Summer/Fall (2007:2021)') +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(year >2007 & month %in% c(7,8,9,10,11,12)),
+                aes(x=mean_cpue, y=mean_t)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  labs(title = 'SFOB x M.S.W Summer/Fall (2007:2021)') +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+```
+
+**2 month lags**
+
+```{r}
+## Shelf water volume 2 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_v_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume summer - 2 month lag
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=mean_v_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume summer - 2 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume fall - 2 month lag
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(10,11,12)),
+                aes(x=mean_cpue, y=mean_v_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume fall - 2 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water temperature 2 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_t_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water salinity 2 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_s_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+```
+
+**3 month lags**
+
+```{r}
+## Shelf water volume 3 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_v_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume - lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume summer - 3 month lag
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=mean_v_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume summer - 3 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+##Shelf water volume fall - 3 month lag
+ggplot2::ggplot(df.shlfvol.sfob %>% filter(month %in% c(10,11,12)),
+                aes(x=mean_cpue, y=mean_v_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume fall - 3 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water temperature 3 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_t_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature - lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water salinity 3 month lag
+ggplot2::ggplot(df.shlfvol.sfob,
+                aes(x=mean_cpue, y=mean_s_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity - lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+```
+
+**Correlations between sf/ob data and shelf water volume/temp/salinity**
+
+```{r}
+#shelf water volume
+
+shlfvol_nolag = dplyr::full_join(shlfvol.sfob, df.lag, by = join_by(year, month)) %>%
+  dplyr::select(year, month, mean_cpue, mean_t, mean_s, mean_v, mean_tri, mean_sed) %>%
+  tidyr::drop_na()
+#shlfvol_nolag <- shlfvol_nolag[-c(11),] #removes outlier
+
+                
+lm_shlf<-lm(mean_v ~ mean_cpue, data=shlfvol_nolag)
+summary(lm_shlf)
+
+shlfvol_nolag = shlfvol_nolag %>%
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_v, method=c("pearson"))
+
+#all months, color coded by season
+ggscatter(shlfvol_nolag, x = "mean_v", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean shelf water volume", ylab = "Monthly mean CPUE/hr", title="Shelf Water Volume")
+
+# by season
+shlfvol_nolag %>% group_by(year, season) %>%
+ ggscatter(x = "mean_v", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Shelf Water Volume", ylab = "Monthly Mean CPUE/hr",
+          title = "Shelf Water Volume")+
+  facet_wrap(~season, scales = 'free')
+ 
+# shelf water temperature
+lm_shlf_t<-lm(mean_t ~ mean_cpue, data=shlfvol_nolag)
+summary(lm_shlf_t)
+
+cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_t, method=c("pearson"))
+
+#all months, color coded by season
+ggscatter(shlfvol_nolag, x = "mean_t", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean shelf water temperature", ylab = "Monthly mean CPUE/hr", title="Shelf Water Temperature")
+
+#by season
+shlfvol_nolag %>% group_by(year, season) %>%
+ ggscatter(x = "mean_t", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Shelf Water Temperature", ylab = "Monthly Mean CPUE/hr",
+          title = "Shelf Water Temperature")+
+  facet_wrap(~season, scales = 'free')
+
+
+# shelf water salinity
+lm_shlf_s<-lm(mean_s ~ mean_cpue, data=shlfvol_nolag)
+summary(lm_shlf_s)
+
+cor.test(shlfvol_nolag$mean_cpue, shlfvol_nolag$mean_s, method=c("pearson"))
+
+ggscatter(shlfvol_nolag, x = "mean_s", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean shelf water salinity", ylab = "Monthly mean CPUE/hr", title="Shelf Water Salinity")
+
+# by season
+shlfvol_nolag %>% group_by(year, season) %>%
+ ggscatter(x = "mean_s", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Shelf Water Salinity", ylab = "Monthly Mean CPUE/hr",
+          title = "Shelf Water Salinity")+
+  facet_wrap(~season, scales = 'free')
+
+```
+
+
+##### Gulf-stream index
+
+Gulf stream index was calculated based on method presented by 
+Pérez-Hernández and Joyce (2014). The gulf stream index (GSI) is a measure of 
+the degrees latitude above the average Gulf Stream position based on ocean
+temperature at 200m (15 C) depth between 55W to 75W.
+
+Positive values indicate a the mean position of the GS is more Northernly, 
+whereas negative values indicate a more Southernly position. 
+
+**Test code for GSI/recruit year lags**
+
+```{r}
+gsi.m <- read.csv(here::here('data/gulf_stream_index/mm_gsi_1954_2022_chen.csv'))
+df <- dplyr::full_join(recruit, gsi.m %>%
+                   group_by(year) %>% 
+                   filter(month %in% c(3:8)) %>% 
+                   summarise(m.gsi = mean(GSI),
+                             sd.gsi = sd(GSI),
+                             max.gsi = max(GSI), 
+                             min.gsi = min(GSI)), 
+                 by = join_by(year)) %>% 
+  mutate(mean_gsi_lag1 = lag(m.gsi,1),
+         mean_gsi_lag2 = lag(m.gsi,2),
+         mean_gsi_lag3 = lag(m.gsi,3),
+         mean_gsi_lag6 = lag(m.gsi,6),
+         mean_gsi_lag7 = lag(m.gsi,7)) %>%
+  mutate(pos = ifelse(m.gsi > 0, 'Northerly', 'Southerly'), 
+         n.pos = ifelse(m.gsi > 0, 1, 0))
+gsi_df <- df[-c(51:69),] 
+gsi_df <- gsi_df[-c(13),] # removes recruitment outlier
+
+## No lag
+lm_rec_gsi<-lm(m.gsi ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi)
+
+cor.test(gsi_df$recruit_est, gsi_df$m.gsi, method=c("pearson"))
+
+ggscatter(gsi_df, x = "m.gsi", y = "recruit_est",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment No Lag")
+
+
+## 1 year lag
+lm_rec_gsi1<-lm(mean_gsi_lag1 ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi1)
+
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag1, method=c("pearson"))
+
+ggscatter(gsi_df, x = "mean_gsi_lag1", y = "recruit_est",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment 1 Year Lag")
+
+
+## 2 year lag
+lm_rec_gsi2<-lm(recruit_est ~ mean_gsi_lag2, data=gsi_df)
+summary(lm_rec_gsi2)
+
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag2, method=c("pearson"))
+
+ggscatter(gsi_df, x = "mean_gsi_lag2", y = "recruit_est",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment 2 Year Lag")
+
+## 3 year lag
+lm_rec_gsi3<-lm(mean_gsi_lag3 ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi3)
+
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag3, method=c("pearson"))
+
+ggscatter(gsi_df, x = "mean_gsi_lag3", y = "recruit_est",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment 3 Year Lag")
+
+
+## 6 year lag
+lm_rec_gsi6<-lm(mean_gsi_lag6 ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi6)
+
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag6, method=c("pearson"))
+
+ggscatter(gsi_df, x = "mean_gsi_lag6", y = "recruit_est",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment 6 Year Lag")
+
+## 7 year lag
+lm_rec_gsi7<-lm(mean_gsi_lag7 ~ recruit_est, data=gsi_df)
+summary(lm_rec_gsi7)
+
+cor.test(gsi_df$recruit_est, gsi_df$mean_gsi_lag7, method=c("pearson"))
+
+ggscatter(gsi_df, x = "mean_gsi_lag7", y = "recruit_est",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly GSI", ylab = "Recruitment Estimate",
+          title = "Recruitment 7 Year Lag")
+
+```
+
+**CPUE/Year lags**
+```{r}
+
+sfob_yr<- dplyr::full_join(catch_recruit, gsi.m %>%
+                   group_by(year) %>% 
+                   summarise(m.gsi = mean(GSI),
+                             sd.gsi = sd(GSI),
+                             max.gsi = max(GSI), 
+                             min.gsi = min(GSI)), 
+                 by = join_by(year)) %>% 
+  mutate(mean_gsi_lag1 = lag(m.gsi,1),
+         mean_gsi_lag2 = lag(m.gsi,2),
+         mean_gsi_lag3 = lag(m.gsi,3)) %>%
+  mutate(pos = ifelse(m.gsi > 0, 'Northerly', 'Southerly'), 
+         n.pos = ifelse(m.gsi > 0, 1, 0))
+gsi_yr <- sfob_yr[-c(20:21,24:69),] #removes years not in study fleet and 2 outliers
+
+## No lag
+lm_cpue_gsi<-lm(m.gsi ~ ttl_sum, data=gsi_yr)
+summary(lm_cpue_gsi)
+
+cor.test(gsi_yr$ttl_sum, gsi_yr$m.gsi, method=c("pearson"))
+
+ggscatter(gsi_yr, x = "m.gsi", y = "ttl_sum",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly GSI", ylab = "Total CPUE/year",
+          title = "SFOB CPUE No Lag")
+
+
+## 1 year lag
+lm_cpue_gsi1<-lm(mean_gsi_lag1 ~ ttl_sum, data=gsi_yr)
+summary(lm_cpue_gsi1)
+
+cor.test(gsi_yr$ttl_sum, gsi_yr$mean_gsi_lag1, method=c("pearson"))
+
+ggscatter(gsi_yr, x = "mean_gsi_lag1", y = "ttl_sum",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly GSI", ylab = "Total CPUE/year",
+          title = "SFOB CPUE 1 Year Lag")
+
+
+## 2 year lag
+lm_cpue_gsi2<-lm(mean_gsi_lag2 ~ ttl_sum, data=gsi_yr)
+summary(lm_cpue_gsi2)
+
+cor.test(gsi_yr$ttl_sum, gsi_yr$mean_gsi_lag2, method=c("pearson"))
+
+ggscatter(gsi_yr, x = "mean_gsi_lag2", y = "ttl_sum",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly GSI", ylab = "Total CPUE/year",
+          title = "SFOB CPUE 2 Year Lag")
+
+
+## 3 year lag
+lm_cpue_gsi3<-lm(mean_gsi_lag3 ~ ttl_sum, data=gsi_yr)
+summary(lm_cpue_gsi3)
+
+cor.test(gsi_yr$ttl_sum, gsi_yr$mean_gsi_lag3, method=c("pearson"))
+
+ggscatter(gsi_yr, x = "mean_gsi_lag3", y = "ttl_sum",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Yearly GSI", ylab = "Total CPUE/year",
+          title = "SFOB CPUE 3 Year Lag")
+
+
+```
+
+
+```{r}
+#gsi.m <- read.csv(here::here('C:/Users/stephanie.owen/Documents/tilefish_indicators/gulf_stream_index/mm_gsi_1954_2022_chen.csv'))
+
+#subset only GSI, month, year and 1997>
+#gsi<-gsi.m[c("GSI","year","month")] %>%
+ # filter(year > 1997)
+#write.csv(gsi, "C:/Users/stephanie.owen/Documents/tilefish_indicators/gulf_stream_index/gsi.csv", row.names=FALSE)
+
+#filter sfob.env 
+#gsi.sfob <- sfob.env %>% filter(depth > 50) %>%
+ # group_by(year,month) %>% 
+  #summarise(mean_cpue = mean(cpue_hr))
+#write.csv(gsi.sfob, "C:/Users/stephanie.owen/Documents/tilefish_indicators/gulf_stream_index/gsi_sfob.csv", row.names=FALSE)
+
+#new df wouldn't recognize month when joining the gsi and sfob data so I did it manually 
+gsi <- read.csv(here::here('C:/Users/stephanie.owen/Documents/tilefish_indicators/data/gulf_stream_index/gsi_sfob.csv'))
+
+gsi_nozero <- filter(gsi, mean_cpue > 0, mean_cpue<15) #removes outlier
+
+gsi.sfob<-mutate(gsi_nozero, pos = ifelse(GSI > 0, 'Northerly', 'Southerly'), 
+         n.pos = ifelse(GSI > 0, 1, 0))
+
+```
+
+**GSI by Month and Season**
+
+```{r}
+# GSI all months (1998-2022)
+ggplot(gsi.sfob ,aes(x=mean_cpue, y=GSI)) + 
+  geom_point(color = 'black') +
+  facet_wrap(~month)+
+  xlab('Mean CPUE/hr') +
+  ylab('Gulf stream position anomaly') +
+  labs(title = 'Gulf stream index by month') +
+  geom_hline(yintercept = 0, lty = 2) +
+  theme_bw()
+
+#GSI Jan-Apr
+filter(gsi.sfob, month %in% c(1:4)) %>%
+ggplot(.,aes(x=mean_cpue, y=GSI)) + 
+ geom_point(color = 'black') +
+  xlab('Mean CPUE/hr') +
+  ylab('Gulf stream position anomaly') +
+  labs(title = 'Gulf stream index (Jan:Mar)') +
+  geom_hline(yintercept = 0, lty = 2) +
+  theme_bw()
+
+#GSI Sept-Dec
+filter(gsi.sfob, month %in% c(9:12)) %>%
+ggplot(.,aes(x=mean_cpue, y=GSI)) + 
+  geom_point(color = 'black') +
+  xlab('Mean CPUE/hr') +
+  ylab('Gulf stream position anomaly') +
+  labs(title = 'Gulf stream index (Apr:Jul)') +
+  geom_hline(yintercept = 0, lty = 2) +
+  theme_bw()
+
+# All months
+ggplot(gsi.sfob, aes(x=mean_cpue, y=GSI)) + 
+  geom_point(color = 'black') +
+  geom_hline(yintercept = 0, lty = 2)+
+  labs(title = 'All months') +
+  xlab('Mean CPUE/hr') +
+  ylab('Gulf stream position anomaly') +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+
+#ANOVA
+pos_aov_cpue <- aov(mean_cpue ~ month * pos,
+              data = gsi.sfob)
+
+# look at effects and interactions
+summary(pos_aov_cpue)
+tidy_pos_aov_cpue <- broom::tidy(pos_aov_cpue)
+tidy_pos_aov_cpue
+
+ggplot(data = gsi.sfob, 
+             aes(x = mean_cpue, y = GSI, fill = pos,  
+                 group = year)) +
+   geom_bar(color = "black", stat = "identity", 
+            position = position_dodge2(preserve = "single"), width = 20) +
+  theme_bw() +
+  labs(title = '1998-2022',
+       x = "Mean CPUE/hr", 
+       y = "Gulf stream position anomaly")
+
+```
+
+**Correlations**
+
+```{r}
+#correlations gsi and cpue
+lm_gsi<-lm(GSI ~ mean_cpue, data=gsi.sfob)
+summary(lm_gsi)
+
+gsi.sfob = gsi.sfob %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+cor.test(gsi.sfob$mean_cpue, gsi.sfob$GSI, method=c("pearson"))
+
+# all months, color coded by season
+ggscatter(gsi.sfob, x = "GSI", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean Monthly GSI", ylab = "Monthly mean CPUE/hr",
+          title = "Gulf stream index")
+
+# by season
+# plot by season
+gsi.sfob %>% group_by(year, season) %>%
+ ggscatter(x = "GSI", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "GSI", ylab = "Monthly Mean CPUE/hr",
+          title = "Gulf Stream Index")+
+  facet_wrap(~season, scales = 'free')
+```
+
+##### Cold pool
+
+
+Excerpt from New York Bight Fish, Fisheries, and Sand Features: Data Review
+Volume 1: Literature Synthesis and Gap Analysis: 
+
+Natural events are documented for Scup (Morse 1978; Smith and Norcross 1968), Bluefish (Slater et al. 2007), and Northern Puffer (Wicklund 1970) in the MAB and NYB as a result of upwelling of cold bottom water, and for Golden Tilefish on the OCS from eastward flow of the Cold Pool (Fisher et al. 2014). Such events are
+difficult to detect and quantify because they are episodic, because they could happen in winter when there are few observers, or because they leave dead animals on the bottom instead of floating (Fisher et al.2014) so that they are only detected incidentally by trawler (e.g., Woodhead (1964)).
+
+
+Cold pool extent: 
+
+Positive values == Larger
+Negative values == Smaller
+
+
+Result: Recruit with no lag has a significant negative relationship with 
+increased cold pool extent, this lines up with what would be expected for GTF. 
+
+```{r}
+## cold pool extent 
+
+
+library(ecodata)
+# Pull cold pool data
+cp <- ecodata::cold_pool
+# Selecting just the extent
+cp.ex <- cp %>% filter(Time %in% c(1994:2020), 
+              Var == 'extent_index') %>%
+          mutate(ext = Value,
+              year = as.numeric(Time))
+
+# Join with sfob yearly total cpue 
+cp.sfob <- dplyr::full_join(sfob_yr, cp.ex, by = join_by(year)) %>%
+  dplyr::select(year, ttl_sum, ext) %>% 
+  filter(year %in% c(1998:2020))
+cp.sfob <- cp.sfob[-c(20:21),] #remove outliers
+
+cp.sfob %>% 
+  ggscatter(x = 'ext', y = 'ttl_sum', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Cold pool extent", ylab = "Annual Total CPUE",
+            title="Cold pool extent")
+
+```
+
+Persistence Index:
+From tech doc: Model_PI measures the duration of the Cold Pool and is estimated using the month when bottom temperature rises above 10C after the Cold Pool is formed each year
+
+Positive values == Longer
+Negative values == Shorter
+
+Result: Significant negative relationship between recruitment estimate and 
+persistence of cold pool, recruitment declines with increased cold pool 
+persistence. 
+
+```{r}
+cp.pers <- cp %>% filter(Time %in% c(1994:2020), 
+              Var == 'persistence_index') %>%
+  mutate(pers = Value,
+         year = as.numeric(Time))
+
+cp.sfob <- dplyr::full_join(sfob_yr, cp.pers, by = join_by(year)) %>%
+  dplyr::select(year, ttl_sum, pers) %>% 
+  filter(year %in% c(1998:2020))
+cp.sfob <- cp.sfob[-c(20:21),] #remove outliers
+
+cp.sfob %>% 
+  ggscatter(x = 'pers', y = 'ttl_sum', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Cold pool persistence", ylab = "Annual Total CPUE",
+            title="Cold pool persistence")
+```
+
+Cold pool index:
+
+From tech doc: The Model_SEI is estimated by the number of cells where bottom temperature remains below 10C for at least 2 months between June and September.
+
+Positive values == colder 
+Negative values == warmer
+
+Result: Linear positive trend is weak and non-signficant.
+
+```{r}
+cpi <- cp %>% filter(Time %in% c(1994:2020), 
+              Var == 'cold_pool_index') %>%
+  mutate(cpi = Value,
+         year = as.numeric(Time))
+
+cpi <- cpi %>%
+  mutate(cpi_lag3 = lag(cpi,3)) #lag 3 years
+         
+cp.sfob <- dplyr::full_join(sfob_yr, cpi, by = join_by(year)) %>%
+  dplyr::select(year, ttl_sum, cpi, cpi_lag3) %>% 
+  filter(year %in% c(1998:2020))
+cp.sfob <- cp.sfob[-c(20:21),] #remove outliers
+
+cp.sfob %>% 
+  ggscatter(x = 'cpi', y = 'ttl_sum', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Cold pool index", ylab = "Annual Total CPUE",
+            title="Cold pool index")
+
+# 1 year lag
+cp.sfob %>% 
+  ggscatter(x = 'cpi_lag3', y = 'ttl_sum', 
+            add = "reg.line", conf.int = TRUE, 
+            cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+            add.params=list(color="dodgerblue", fill="lightgray"),
+            xlab = "Cold pool index", ylab = "Annual Total CPUE",
+            title="Cold pool index - 3 year lag")
+```
+
+#### Food availablity 
+
+Larval tilefish eat zooplankton, likely calanus. *Calanus finmarchicus* are a
+copepod (crustacean) with a one-year life cycle and are an important food 
+source for many commercially important species. Calanus spp. are lipid rich, 
+herbivorous species that eat phytoplankton, diatoms in particular 
+(Hobbs et al. 2020).
+
+Diatoms are often represented as microplankton (>20 µm), but many species are of
+the nanoplankton size class (2-20 µm), and a smaller few may even overlap 
+with picoplanton size class (<2 µm).
+
+
+
+##### Microplankton
+```{r}
+# microplankton
+micro<-read.csv(here::here('data/phyto_size_class/microplankton_ts_gtf_strata.csv'))
+```
+
+
+##### Microplankton maps {.tabset}
+
+```{r, micromaps, results='asis'}
+
+```
+
+##### Microplankton analysis
+
+```{r}
+# microplankton by month with lag
+micro.lag <- micro %>%
+  mutate(mean_micro_lag2 = lag(weighted_mean_micro,2),
+         mean_micro_lag3 = lag(weighted_mean_micro,3),
+         mean_micro_lag6 = lag(weighted_mean_micro,6))
+
+# filter sfob.env 
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<15) %>%
+  group_by(year,month) %>% 
+  summarise(mean_cpue = mean(cpue_hr)) 
+         
+# Join with sf/ob data
+micro.sfob <- dplyr::full_join(micro.lag, sfob, by = join_by(year, month)) %>%
+  dplyr::select(year, month, mean_cpue, mean_micro, weighted_mean_micro, mean_micro_lag2, mean_micro_lag3, mean_micro_lag6) %>%
+  tidyr::drop_na()
+
+
+## Microplankton no lag
+ggplot2::ggplot(micro.sfob,
+                aes(x=mean_cpue, y=weighted_mean_micro)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Mean Microplankton no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Microplankton summer
+ggplot2::ggplot(micro.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=weighted_mean_micro)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Summer Mean Microplankton') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Microplankton spring
+ggplot2::ggplot(micro.sfob %>% filter(month %in% c(4,5,6)),
+                aes(x=mean_cpue, y=weighted_mean_micro)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Spring Mean Microplankton') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 2 month lag
+ggplot2::ggplot(micro.sfob,
+                aes(x=mean_cpue, y=mean_micro_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Mean Microplankton 2 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 3 month lag
+ggplot2::ggplot(micro.sfob,
+                aes(x=mean_cpue, y=mean_micro_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Mean Microplankton 3 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 6 month lag
+ggplot2::ggplot(micro.sfob,
+                aes(x=mean_cpue, y=mean_micro_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean Microplankton') +
+  labs(title = 'Mean Microplankton 6 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+```
+**Micro correlation**
+
+```{r}
+# Correlation and plot
+lm_micro<-lm(weighted_mean_micro ~ mean_cpue, data=micro.sfob)
+summary(lm_micro)
+
+micro.sfob = micro.sfob %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+cor.test(micro.sfob$mean_cpue, micro.sfob$weighted_mean_micro, method=c("pearson"))
+
+#all months, color coded by season
+ggscatter(micro.sfob, x = "weighted_mean_micro", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Weighted mean microplankton", ylab = "Monthly mean CPUE/hr",
+          title = "Microplankton")
+
+# by season
+micro.sfob %>% group_by(year, season) %>%
+ ggscatter(x = "weighted_mean_micro", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Weighted Mean Microplankton", ylab = "Monthly Mean CPUE/hr",
+          title = "Microplankton")+
+  facet_wrap(~season, scales = 'free')
+
+```
+
+
+
+
+##### Chlorophyll-A
+```{r}
+
+# CHL-A
+chl<-read.csv(here::here('data/chl/chl_ts_gtf_strata.csv'))
+```
+
+##### Maps (Chlorophyll-A) {.tabset}
+```{r, chlmaps, results='asis'}
+
+```
+
+##### Chlorophyll-A analysis
+
+```{r, c21}
+# chl by month with lag
+chl.lag <- chl %>%
+  mutate(mean_chl_lag2 = lag(weighted_mean_chl,2),
+         mean_chl_lag3 = lag(weighted_mean_chl,3),
+         mean_chl_lag6 = lag(weighted_mean_chl,6))
+
+# filter sfob.env 
+sfob <- sfob.env %>% filter(depth > 50, cpue_hr > 0, cpue_hr<15) %>%
+  group_by(year,month) %>% 
+  summarise(mean_cpue = mean(cpue_hr)) 
+         
+# Join with sf/ob data
+chl.sfob <- dplyr::full_join(chl.lag, sfob, by = join_by(year, month)) %>%
+  dplyr::select(year, month, mean_cpue, mean_chl, weighted_mean_chl, mean_chl_lag2, mean_chl_lag3, mean_chl_lag6) %>%
+  tidyr::drop_na()
+
+
+## CHL-a no lag
+ggplot2::ggplot(chl.sfob,
+                aes(x=mean_cpue, y=weighted_mean_chl)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Mean CHL-a no lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## CHL summer
+ggplot2::ggplot(chl.sfob %>% filter(month %in% c(7,8,9)),
+                aes(x=mean_cpue, y=weighted_mean_chl)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Summer Mean CHL-a') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## CHL fall
+ggplot2::ggplot(chl.sfob %>% filter(month %in% c(10,11,12)),
+                aes(x=mean_cpue, y=weighted_mean_chl)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Fall Mean CHL-a') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 2 month lag
+ggplot2::ggplot(chl.sfob,
+                aes(x=mean_cpue, y=mean_chl_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Mean CHL-a 2 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 3 month lag
+ggplot2::ggplot(chl.sfob,
+                aes(x=mean_cpue, y=mean_chl_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Mean CHL-a 3 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## 6 month lag
+ggplot2::ggplot(chl.sfob,
+                aes(x=mean_cpue, y=mean_chl_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean CHL-a') +
+  labs(title = 'Mean CHL-a 6 month lag') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+```
+
+**CHL-a and CPUE correlation**
+
+```{r}
+lm_chl<-lm(weighted_mean_chl ~ mean_cpue, data=chl.sfob)
+summary(lm_chl)
+
+chl.sfob = chl.sfob %>% 
+  mutate(season = case_when(month %in% c(1,2,3) ~ 'winter', 
+                            month %in% c(4,5,6) ~ 'spring', 
+                            month %in% c(7,8,9) ~ 'summer', 
+                            month %in% c(10,11,12) ~ 'fall'))
+
+cor.test(chl.sfob$mean_cpue, chl.sfob$weighted_mean_chl, method=c("pearson"))
+ggscatter(chl.sfob, x = "weighted_mean_chl", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          color="season", palette="Spectral",
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Weighted mean CHL-a", ylab = "Monthly mean CPUE/hr",
+          title = "CHL-a")
+
+#by season
+chl.sfob %>% group_by(year, season) %>%
+ ggscatter(x = "weighted_mean_chl", y = "mean_cpue", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Weighted Mean Chlorophyll-a", ylab = "Monthly Mean CPUE/hr",
+          title = "Chlorophyll-a")+
+  facet_wrap(~season, scales = 'free')
+```
+
+##### SST Fronts
+
+```{r}
+# SST fronts
+fprob<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_3x3.csv')) #fprob across all individual strata
+fprob.ind<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_indv_substrata_3x3.csv')) #mean for each of 14 substrata
+fprob.ns<-read.csv(here::here('data/sst_fronts/fprob_seasonal_ts_gtf_n_v_s_substrata_3x3.csv')) #mean for substrata N and S of Hudson canyon
+
+```
+
+##### Maps (SST fronts) {.tabset}
+```{r, sst front maps, results='asis'}
+
+
+```
+
+##### SST Fronts analysis
+
+**FPROB across all individual strata**
+```{r}
+#sfob by season
+sfob_season<-read.csv(here::here('data/sst_fronts/sfob_byseason.csv'))
+
+sfob_season <- sfob_season %>% filter (mean_cpue<30) #removes outlier
+
+         
+#join with fprob
+fprob.sfob <- dplyr::full_join(fprob, sfob_season, by = join_by(year, season)) %>%
+  dplyr::select(year, season, mean_cpue, mean_fprob, weighted_mean_fprob) %>%
+  tidyr::drop_na()
+
+## All months
+ggplot2::ggplot(fprob.sfob,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Mean SST frontal probability') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Winter
+ggplot2::ggplot(fprob.sfob %>% filter(season == "winter") ,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Winter Mean SST frontal probability') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Spring
+ggplot2::ggplot(fprob.sfob %>% filter(season == "spring"),
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Spring Mean SST frontal probability') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Summer
+ggplot2::ggplot(fprob.sfob %>% filter(season == "summer"),
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Summer Mean SST frontal probability') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Fall
+ggplot2::ggplot(fprob.sfob %>% filter(season == "fall"),
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Fall Mean SST frontal probability') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Correlation 
+lm_fprob<-lm(mean_cpue ~ weighted_mean_fprob, data=fprob.sfob)
+summary(lm_fprob)
+
+cor.test(fprob.sfob$mean_cpue, fprob.sfob$weighted_mean_fprob, method=c("pearson"))
+ggscatter(fprob.sfob, x = "mean_cpue", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson"),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean Seasonal SST Frontal probability")
+
+```
+
+**FPROB of each substrata**
+
+```{r}
+#join with sfob
+ind.sfob <- dplyr::full_join(fprob.ind, sfob_season, by = join_by(year, season)) %>%
+  dplyr::select(year, season, id, mean_cpue, mean_fprob, weighted_mean_fprob) %>%
+  tidyr::drop_na()
+
+# fprob by substrata
+ggplot2::ggplot(ind.sfob,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Mean SST frontal probability') +
+  stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+               label.x.npc = 30, label.y.npc = 0.15,
+               parse = TRUE, size = 3)  +
+  theme_bw() +
+  facet_wrap(~id) +
+  theme_facet()
+
+## Winter
+ggplot2::ggplot(ind.sfob %>% filter(season == "winter") ,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Winter Mean SST frontal probability') +
+  stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+               label.x.npc = 30, label.y.npc = 0.15,
+               parse = TRUE, size = 3)  +
+  theme_bw() +
+  facet_wrap(~id) +
+  theme_facet()
+
+## Spring
+ggplot2::ggplot(ind.sfob %>% filter(season == "spring") ,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Spring Mean SST frontal probability') +
+  stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+               label.x.npc = 30, label.y.npc = 0.15,
+               parse = TRUE, size = 3)  +
+  theme_bw() +
+  facet_wrap(~id) +
+  theme_facet()
+
+## Summer
+ggplot2::ggplot(ind.sfob %>% filter(season == "summer") ,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Summer Mean SST frontal probability') +
+  stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+               label.x.npc = 30, label.y.npc = 0.15,
+               parse = TRUE, size = 3)  +
+  theme_bw() +
+  facet_wrap(~id) +
+  theme_facet()
+
+## Fall
+ggplot2::ggplot(ind.sfob %>% filter(season == "fall") ,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Fall Mean SST frontal probability') +
+  stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+               label.x.npc = 30, label.y.npc = 0.15,
+               parse = TRUE, size = 3)  +
+  theme_bw() +
+  facet_wrap(~id) +
+  theme_facet()
+
+## Scatter plot with correlations
+#plot cuts off p values unless you open it in a new window and save 
+ggscatter(ind.sfob, x = "mean_cpue", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean SST frontal probability") +
+  facet_wrap(~id) +
+  theme_facet()
+
+```
+
+**N/S substrata**
+
+```{r}
+fprob_ns<-read.csv(here::here('data/sst_fronts/fprob_ns.csv'))
+fprob.ns<-fprob_ns[!(is.na(fprob_ns$mean_cpue)), ]
+
+# fprob by N/S Hudson Canyon
+ggplot2::ggplot(fprob.ns,
+                aes(x=mean_cpue, y=weighted_mean_fprob)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Mean CPUE/hr') +
+  ylab('Weighted mean SST frontal probability') +
+  labs(title = 'Mean SST frontal probability') +
+   stat_poly_eq(aes(label = paste(..rr.label.., sep = "~~~")), 
+              label.x.npc = 10,
+               parse = TRUE, size = 5)  +
+  theme_bw() +
+  facet_wrap(~substrat) +
+  theme_facet()
+
+## Scatter plot with correlations
+ggscatter(fprob.ns, x = "mean_cpue", y = "weighted_mean_fprob", 
+          add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.coeff.args = list(method="pearson", 
+              label.x=20, label.y=0.6, size =3),
+          add.params=list(color="dodgerblue", fill="lightgray"),
+          xlab = "Mean CPUE/hr", ylab = "Mean SST frontal probability") +
+  facet_wrap(~substrat) +
+  theme_facet()
+```
+
+##### Multivariable GAMs
+
+```{r}
+## habitat (sst/bt/sal?)
+habitat <- dplyr::full_join(
+  sst.sfob, df.lag.sfob, by = join_by(year, month, mean_cpue, mean_tri, mean_sed)) %>%
+  dplyr::select(year, month, mean_cpue, weighted_mean_sst, mean_bt, mean_tri, mean_sed)
+habitat <- habitat[-c(1:22),] #removes year up to 2007 (start of insitu bt data)
+
+habitat.gam <- gam(mean_cpue ~ s(weighted_mean_sst, k=10) + s(mean_bt, k=10) + mean_tri + mean_sed, data=habitat, method="REML")
+summary(habitat.gam)
+plot(habitat.gam, seWithMean = TRUE)
+
+## currents (shelf vol./GSI)
+df.gsi <- read.csv(here::here('data/gulf_stream_index/df.gsi.csv')) #with tri and sed
+df.gsi <- tidyr::drop_na(df.gsi)
+
+
+currents <- dplyr::full_join(
+  shlfvol_nolag, df.gsi, by = join_by(year, month, mean_cpue, mean_tri, mean_sed)) %>%
+  dplyr::select(year, month, mean_cpue, mean_v, GSI, mean_tri, mean_sed)
+
+currents1 <- read.csv(here::here('data/gulf_stream_index/currents.csv')) #cleaned up
+
+currents.gam <- gam(mean_cpue ~ s(mean_v, k=10) + s(GSI, k=10) + mean_tri + mean_sed, data=currents1, method="REML")
+summary(currents.gam)
+plot(currents.gam, seWithMean = TRUE)
+
+## food availability
+
+food <- read.csv(here::here('data/food.csv')) #cleaned up with added tri and sed 
+
+food.gam <- gam(mean_cpue ~ s(weighted_mean_micro, k=10) + s(weighted_mean_chl, k=10) + s(weighted_mean_fprob, k=10) + mean_tri + mean_sed, data=food, method="REML")
+
+plot(food.gam)
+```
+
+
+
+
+
+References: 
+
+
+Hobbs, L., Banas, N. S., Cottier, F. R., Berge, J., & Daase, M. (2020). Eat or 
+sleep: availability of winter prey explains mid-winter and spring activity in
+an Arctic Calanus population. Frontiers in Marine Science, 7, 541564.
+
+
+
+
+
+
+
+
+
+
+
+
+

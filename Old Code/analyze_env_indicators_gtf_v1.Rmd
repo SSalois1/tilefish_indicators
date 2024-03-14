@@ -1,0 +1,1575 @@
+---
+title: "Environmental indicator analysis-Tilefish"
+output:  
+  html_document:
+    code_fold: hide
+    toc: true
+    toc_depth: 5
+    toc_float: true
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r, wrangling}
+
+# Loading packages and data
+library(ggplot2)
+library(ecodata)
+library(lubridate)
+library(dplyr)
+library(stringr)
+library(marmap) # bathymetry
+library(RColorBrewer)
+library(ggnewscale)
+library(sf)
+library(cowplot)
+library(tidyverse)
+library(ggpubr)
+library(sf)
+library(ggdist)
+library(ggpubr)
+library(wesanderson)
+library(raster)
+#library(glmTMB)
+
+# CPUE data (no env covariates)
+gt_data_model_cpue <- read.csv(here::here('data/catch_data/gt_data_model_cpue.csv'))
+#names(gt_data_model_cpue) <- tolower(names(gt_data_model_cpue))
+# Add in column with cpue 
+# note: Paul indicated to use small mesh
+gt_data_model_cpue <- gt_data_model_cpue %>% 
+       rename_all(., .funs = tolower) %>% 
+  mutate(mesh_bin = case_when(mesh_size <= 5.6 ~ 'SM',mesh_size >= 5.6 ~ 'LG',
+                                                      TRUE ~ 'NA')) %>%
+  mutate(cpue_hr = sum_gt_catch/effort_dur)
+
+# Catch data: 
+sfobs <-readRDS(here::here('data/catch_data/gold_tile_sf_ob_v1_temp_price.rds'))
+
+sfob.env <- sfobs %>% 
+  mutate(mesh_bin = case_when(mesh_size <= 5.6 ~ 'SM', mesh_size >= 5.6 ~ 'LG',
+                              TRUE ~ 'NA'),
+         cpue_hr = SUM_GT_CATCH/effort_dur) %>% 
+  filter(YEAR %in% c(1998:2022) & mesh_bin == 'SM') %>%
+  dplyr::select(DATE, YEAR, MONTH, YDAY,trip_id,hull_num, area, effort_dur, 
+         SUM_GT_CATCH, cpue_hr, mesh_size, mesh_bin, depth, start_lat, start_lon,
+         bottomT, bottomT_avg, MIN_TEMP_C, MEAN_TEMP_C, MAX_TEMP_C,
+         TEMP_VARIANCE, TEMP_DEVIATION, MEAN_DPTH_M, tri, sed) %>% 
+  mutate(YEAR = as.integer(YEAR)) %>% 
+  rename_all(., .funs = tolower)
+
+
+areas <- sort(unique(sfob.env$area))
+catch.tally.ann <- sfob.env %>% # aggregate by year
+  group_by(year) %>% 
+  summarise(ttl_sum = sum(sum_gt_catch))
+
+# Length data from observer program 
+lengths <- read.csv(here::here('data/catch_data/gt_data_length_andy.csv')) 
+names(lengths) <- tolower(names(lengths))
+
+# Recruitment estimates from 2021 report
+recruit <- read.csv(here::here('data/assessment_data/tilefish_rec_estimate_2021.csv'))
+
+# Merge SF/Obs catch data with recruit estimates:
+catch_recruit <- cbind(recruit %>% filter(year %in% c(1998:2020)),
+                       catch.tally.ann %>%
+                         filter(year %in% c(1998:2020)) %>%
+                         dplyr::select(ttl_sum))
+
+# loading in shape files for maps
+US.areas <- st_read(here::here('shapefiles/USA.shp'), quiet = TRUE)
+canada.areas <- st_read(here::here('shapefiles/Canada.shp'), quiet = TRUE)
+bts_strata <- st_read(here::here('shapefiles/NES_BOTTOM_TRAWL_STRATA.shp'),
+                      quiet = TRUE)
+# plot(bts_strata) # to see all bottom trawl strata
+
+gtf_strata <- bts_strata %>% 
+  filter(STRATUMA %in% c('01030', '01040', '01070', '01080', '01110', '01120', 
+                         '01140', '01150', '01670', '01680', '01710', '01720', 
+                         '01750', '01760')) # select just the gtf strata
+# plot(gtf_strata)
+bathy <- marmap::getNOAA.bathy(-81,-58, 27, 46)
+bathy = fortify.bathy(bathy)
+
+```
+
+
+
+## Tilefish data
+***
+
+### Catch data
+
+Year-class strength is broadly defined as the number of fish spawned or hatched 
+in a given year (Ricker, 1975).
+
+
+Figure 1. Sum of catch (not accounting for effort), across years. Light blue 
+shaded region represents the temporal range of observer records and red 
+shaded region represents temporal range of study fleet records. The 'purple' 
+region is where they overlap. Note that 2000-2005 for observer records had 
+low sample size/number of vessels for tilefish, making the shaded region likely 
+the best region to use for analysis. The vertical dashed lines represent strong
+year classes for this species (Nesslage et al. 2021). Red asterisk marks year
+that stock was deemed 're-built'.
+
+```{r, c1}
+# tot_catch == total (sum_catch) across hauls. so if tallying up annually, 
+# use sum_catch
+# Strong year-classes: 1970, 1973, 1993, 1999, 2005, 2013
+
+ggplot(catch.tally.ann, aes(x = factor(year), y = ttl_sum, group = 1))+
+   geom_rect(aes(xmin = '2007', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'red', alpha = 0.02) +
+  geom_rect(aes(xmin = '2000', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'lightblue', alpha = 0.05) +
+   geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
+  geom_line(color = 'black', size = 1.5) +
+  annotate("text", label = "*",
+    x = 26, y = 14000, size = 8, colour = "red" )+
+  xlab('Year') + 
+  ylab('Total sum tilefish catch') + 
+  # facet_wrap(~month)+
+  theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  ecodata::theme_facet()
+
+```
+
+
+#### CPUE 
+
+
+Figure 2. Catch-per-unit-effot for undirected trawl trips from the Study fleet and 
+observer program. Zeros have been added using species association methodology
+(via jaccard index). 
+
+[see here for example](https://static1.squarespace.com/static/511cdc7fe4b00307a2628ac6/t/64501a9ee391c8439cbc3c04/1682971295614/c_MRIP+Index_Drew+2022d.pdf)
+
+```{r, c2}
+gt_data_model_cpue %>% 
+  filter(mesh_bin == 'SM') %>% # note: Paul indicated to use small mesh
+  group_by(year, source) %>% 
+  summarise(mean_cpue = mean(cpue_hr),.groups = 'drop') %>%
+  ggplot(aes(x=year,y=mean_cpue)) +
+  geom_line(lwd = 1) +
+  facet_wrap(~source) + 
+  theme_bw()
+
+gt_data_model_cpue %>% 
+  filter(mesh_bin == 'SM') %>%
+  group_by(year) %>% 
+  summarise(mean_cpue = mean(cpue_hr),.groups = 'drop') %>%
+  ggplot(aes(x=year,y=mean_cpue)) +
+  geom_line(lwd = 1) +
+  labs(title = 'Study fleet + Observer combined') + 
+  theme_bw()
+
+```
+
+
+#### Maps (catch) {.tabset}
+
+Tilefish catch locations (study fleet/observer)
+
+```{r, maps, results='asis'}
+
+yrs = sort(unique(gt_data_model_cpue$year))    
+
+#for(i in 1:length(yrs)){
+yrmap <- function(yrs){
+  gt_data_model_cpue %>% 
+  filter(start_lat < 42.5 & depth_est > 50 & year == yrs) %>%
+  mutate(bin = cut(year, seq(min(year), max(year) + 4, 4), right = FALSE)) %>%
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  stat_summary_2d(aes(x=start_lon, y=start_lat, z = cpue_hr),
+                  binwidth=c(0.16666,0.16666)) + 
+  scale_fill_viridis_c() + 
+  theme(legend.position = "bottom",
+        legend.key.size = unit(0.2, "cm"),
+        legend.key.width = unit(1, "cm")) +
+  coord_sf(xlim = c(-75,-65.5), ylim = c(36,44), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'CPUE') +
+  theme_bw() 
+}
+
+
+for(i in 1:length(yrs)){
+ cat("\n#####",  as.character(yrs[i]),"\n")
+    print(yrmap(yrs[i])) 
+    cat("\n")   
+}
+
+
+```
+
+
+
+### Recruitment estimate
+
+Figure 3. Age-1 recruitment estimate from the 2021 tilefish assessment across 
+all years
+
+```{r, c4}
+
+ggplot(recruit, aes(x = factor(year), y = recruit_est, group = 1))+
+   geom_rect(aes(xmin = '2007', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'red', alpha = 0.02) +
+  geom_rect(aes(xmin = '2000', xmax = '2022', ymin = -Inf, ymax = Inf), 
+            fill = 'lightblue', alpha = 0.05) +
+   geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
+  geom_line(color = 'black', size = 1.5) +
+  annotate("text", label = "*",
+    x = 26, y = 14000, size = 8, colour = "red" )+
+  xlab('Year') + 
+  ylab('Total sum tilefish catch') + 
+  # facet_wrap(~month)+
+  theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  ecodata::theme_facet()
+
+### Thought: Should we isolate years associated w/strong year classes (or bad)
+###           for correlations and analyses? 
+```
+
+
+Figure 4. Recruitment estimates in focus years 
+
++ Paul has suggested that data used to calculate recruitment 
+estimates was strongest from 2000 to present. 
++ Extended to 1998 to capture both the strong year class and El nino associated 
+with that year. 
+
+```{r, c5}
+ggplot(recruit %>% filter(year %in% c(1998:2022)),
+       aes(x = factor(year), y = recruit_est, group = 1))+
+  geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
+  geom_line(color = 'black', size = 1.2) +
+  xlab('Year') + 
+  ylab('Recruit estimates') + 
+  theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  ecodata::theme_facet()
+```
+
+Figure 5. Recruitment estimates and Study Fleet and Observer catch data. Black
+line denotes recruitment estimate, yellow denotes sum of annual catch data
+across both Study fleet and Observer programs. 
+
+```{r, c6}
+options(scipen=999)
+ggplot(catch_recruit) +
+  geom_line(aes(x = factor(year), y = recruit_est, group = 1),
+            col = 'black', size = 1.2) +
+  geom_line(aes(x = factor(year), y = ttl_sum*1000), size = 1.2, 
+            color = 'goldenrod1', group = 1) +
+  scale_y_continuous(sec.axis = sec_axis(~./1000, name = 'Catch (lbs)')) + 
+  geom_vline(xintercept = c('1993','1999', '2005', '2013'), lty = 2) +
+  xlab('Year') + 
+  ylab('Recruit estimates') + 
+   theme(axis.text.x = element_text(color = 'black',
+                                   size = 12, angle = 45, vjust = 1, hjust=1)) +
+  ecodata::theme_facet()
+```
+
+### Length data
+
+#### All lengths
+
+Figure 6. Distribution of lengths 
+Figure 7. Length frequencies
+Figure 8. Frequency of smaller individuals 
+
+
+```{r, c7}
+# Define category breaks
+size_breaks <- c(0,10,20,30,40, 50, 60, 70, 80, 90, 100)
+# Making a function to bin the catches
+label_interval <- function(breaks) {
+  paste0("(", breaks[1:length(breaks) - 1], "-", breaks[2:length(breaks)], ")")
+}
+labels = label_interval(size_breaks)
+
+# length freq. table
+tab = table(cut(lengths$lenanml, 
+    breaks = size_breaks,
+    labels = label_interval(size_breaks)))
+
+## Plot full distribution
+ggplot(lengths,
+       aes(x = lenanml)) + 
+  geom_bar(position = position_dodge(), 
+           alpha = 0.4, fill= 'blue', color="black") + 
+  xlab('Tilefish length (cm)') +
+  theme_bw() +
+  theme_facet()
+
+# Plot length frequencies
+barplot(tab, xlab = 'Length bins (mm)', main = '')
+
+# Just the little ones
+barplot(tab[1:3], xlab = 'Length bins (mm)', main = '')
+```
+
+#### Juveniles 
+
+Young of year - year 1 and 2 size class
+
+```{r, c8}
+ggplot(lengths %>% filter(lenanml <= 26),
+       aes(x = lenanml)) + 
+  geom_bar(position = position_dodge(), 
+           fill= 'slateblue', color="black") + 
+  xlab('Tilefish length (cm)') +
+  theme_bw() +
+  theme_facet()
+ggplot(lengths %>% filter(lenanml <= 26),
+       aes(x = lenanml, fill = numlen)) + 
+  geom_bar(position = position_dodge(), 
+           alpha = 0.4, fill= 'blue', color="black") + 
+  xlab('Tilefish length (cm)') +
+  theme_bw() +
+  facet_wrap(~year) + 
+  theme_facet()
+```
+
+
+### Environmental data
+***
+
+The strong year classes for Golden Tilefish were 1993, 1998, 2005, 2013. 
+Some of the underlying oceanographic processes that may be related to recruitment
+may influence habitat, retention/displacement and food availablity. These are
+explored below. 
+
+
+#### Habitat
+
+Tilefish occupy a very narrow band of habitat conditions. Therefore, temperature 
+and salinity may be of interest. 
+
+##### SST
+
+```{r, c9}
+# SST
+
+```
+
+##### Maps (SST) {.tabset}
+
+```{r, sst maps, results='asis'}
+
+```
+
+##### SST analysis
+
+
+```{r}
+
+```
+
+
+##### Bottom Temperature
+
+Figure 1. GLORYS vs in-situ bottom temperatures from study fleet vessels. 
+
+Figure 2. Bottom temperature (C) across years. Blue dots are in-situ data, red
+dots are from GLORYS. 
+
+```{r, c11}
+
+ggplot2::ggplot(sfob.env, aes(x=bottomt, y=mean_temp_c)) +
+  geom_point(color="blue", alpha=0.1)+
+  geom_abline(intercept = 0, slope = 1) +
+  xlab('Bottom Temp (SF)') +
+  ylab('Bottom Temp (GLORYS)') +
+  theme_bw() 
+
+ggplot2::ggplot(sfob.env, aes(x=bottomt, y=year)) +
+  geom_point(color="blue", alpha=0.1) +
+  geom_point(data = sfob.env, aes(x=mean_temp_c, y=year),
+             color="red", alpha=0.1) +
+  xlab('Bottom Temp') +
+  ylab('Year') +
+  labs(color = 'Source') +
+  theme_bw() 
+
+```
+
+
+##### Maps (Bottom T) {.tabset}
+
+
+```{r, maps bt, results='asis'}
+
+jet.colors <-colorRampPalette(c("blue", "#007FFF", "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+
+# select just years with study fleet bottom temps
+sf.bt <- sfob.env %>% filter(year>2006 & depth > 50) 
+yrs = sort(unique(sf.bt$year))    
+
+#for(i in 1:length(yrs)){
+yrmap <- function(yrs){
+  sf.bt %>% filter(year == yrs) %>% 
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  stat_summary_2d(aes(x=start_lon, y=start_lat, z = bottomt),
+                  binwidth=c(0.16666,0.16666)) + 
+    scale_fill_gradientn(colors = jet.colors(20)) +
+  coord_sf(xlim = c(-75,-65.5), ylim = c(36,44), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'Bottom temperature (°C)') +
+  theme_bw() 
+}
+
+
+for(i in 1:length(yrs)){
+ cat("\n######",  as.character(yrs[i]),"\n")
+    print(yrmap(yrs[i])) 
+    cat("\n")   
+}
+
+
+```
+
+
+##### Bottom T analysis
+
+The following figures compare in-situ bottom temperature from the study-fleet
+data set to the recruitment estimate. 
+
++ Note here temperatures are averaged across all depths > 50 for each month.
+
+```{r, c13}
+
+# Note here temperatures are averaged across all depths > 50 for each month.
+
+# Create in-situ bottom temps by month w/lag
+df.lag = sfob.env %>% filter(year > 2006 & depth > 50) %>%
+  group_by(year,month) %>% 
+  summarise(mean_dpth = mean(depth),
+            mean_bt = mean(bottomt)) %>% 
+  mutate(mean_bt_lag2 = lag(mean_bt,2),
+         mean_bt_lag3 = lag(mean_bt,3), 
+         mean_bt_lag6 = lag(mean_bt, 6))
+# Join in-situ bottom temps w/assessment recruitment estimate
+df.join = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, mean_dpth, 
+                mean_bt, mean_bt_lag2, mean_bt_lag3, mean_bt_lag6) %>%
+  tidyr::drop_na()
+# See what months have data
+sort(unique(df.join$month))
+hist(df.join$month) # will group into spring/summer fall/winter categories
+## spring/summer bottom temp no lag
+ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
+                aes(x=recruit_est, y=mean_bt)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean bottom temp (°C)')+
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## spring/summer bottom temp no lag
+ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
+                aes(x=recruit_est, y=mean_bt)) + 
+  geom_point(color= 'black')+
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean bottom temp (°C)')+
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## spring/summer bottom temp 2 month lag
+ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
+                aes(x = recruit_est, y = mean_bt_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## spring/summer bottom temp 2 month lag
+ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
+                aes(x = recruit_est, y = mean_bt_lag2)) + 
+  geom_point(color= 'black')+
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## spring/summer bottom temp 3 month lag
+ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
+                aes(x = recruit_est, y = mean_bt_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## spring/summer bottom temp 3 month lag
+ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
+                aes(x = recruit_est, y = mean_bt_lag3)) + 
+  geom_point(color= 'black')+
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## spring/summer bottom temp 6 month lag
+ggplot2::ggplot(df.join %>% filter(month %in% c(4,5,6,7,8)),
+                aes(x = recruit_est, y = mean_bt_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Lag 6 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## spring/summer bottom temp 6 month lag
+ggplot2::ggplot(df.join %>% filter(month %in% c(9,10,11,12)),
+                aes(x = recruit_est, y = mean_bt_lag6)) + 
+  geom_point(color= 'black')+
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean bottom temp (°C)')+
+  labs(title = 'Lag 6 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+
+
+
+
+```
+
+
+
+The following figures compare in-situ bottom temperature from the study-fleet
+data set to the Study fleet and Observer tilefish catch data. 
+
++ Note here temperatures are averaged across all depths > 50 for each month.
+
+**Stephanie I hope the code below is a good jumping off point!** 
+
+```{r}
+# Stephanie here I subset the years that are relevant to the Study fleet 
+# data set. Note that Paul suggested looking at catch that is from depths 
+# greater than 50 m and only from small mesh gear. The object sfob.env is
+# already filtered for just small gear (see line 57 above).
+
+
+# You can run this line just to check. 
+unique(sfob.env$mesh_bin)
+
+# the lines that create the df.lag object selects  depths > 50, just note 
+# that there are many depths here, so this is taking the average temperature
+# across all depths. We may want to think a bit more about how we want to 
+# subset for averaging (or not?)
+
+# here is a way to see what depths are reported 
+sort(unique(sfob.env$depth))
+
+# another note - since I group by year AND month - the lags are month specific. 
+# If you wanted to lag by year only, you would have to get rid of month below.
+df.lag = sfob.env %>% filter(year > 2006 & depth > 50) %>%
+  group_by(year,month) %>% 
+  summarise(mean_dpth = mean(depth),
+            mean_bt = mean(bottomt)) %>% 
+  mutate(mean_bt_lag2 = lag(mean_bt,2),
+         mean_bt_lag3 = lag(mean_bt,3), 
+         mean_bt_lag6 = lag(mean_bt, 6))
+
+
+
+```
+
+
+
+##### Salinity
+
+Here we explore salinity from the GLORYS reanalysis model at three different 
+depths
+
+ + 55 meters (relevant to larvae, recruits)
+ + 110 meters (relevant recruits, juveniles)
+ + 220 meters (relevant to juveniles, adults)
+
+```{r, c14}
+# Salinity 
+
+```
+
+##### Maps (Salinity) {.tabset}
+
+
+```{r, maps sal, results='asis'}
+
+jet.colors <-colorRampPalette(c("blue", "#007FFF", "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+
+# b <- brick(here::here('data/salinity/dd_sal_55_2000_2009.tif'))
+# b.00 <- b[,,,1:365]
+
+# select just years with study fleet bottom temps
+sf.bt <- sfob.env %>% filter(year>2006 & depth > 50) 
+yrs = sort(unique(sf.bt$year))    
+
+#for(i in 1:length(yrs)){
+yrmap <- function(yrs){
+  sf.bt %>% filter(year == yrs) %>% 
+  ggplot() + 
+  geom_sf(data = US.areas %>% st_as_sf(),color = 'gray20', fill = '#cbdbcd') +
+  geom_contour(data = bathy,
+               aes(x=x,y=y,z=-1*z),
+               breaks=c(50,100,150,200, Inf),
+               size=c(0.3),
+               col = 'darkgrey') +
+  # stat_summary_2d(aes(x=start_lon, y=start_lat, z = bottomt),
+  #                 binwidth=c(0.16666,0.16666)) + 
+  #   scale_fill_gradientn(colors = jet.colors(20)) +
+  coord_sf(xlim = c(-75,-65.5), ylim = c(36,44), datum = sf::st_crs(4326))  +
+  labs(x = '', y = '', fill = 'Salinty') +
+  theme_bw() 
+}
+
+
+for(i in 1:length(yrs)){
+ cat("\n######",  as.character(yrs[i]),"\n")
+    print(yrmap(yrs[i])) 
+    cat("\n")   
+}
+
+
+```
+
+##### Salinity analysis
+
+```{r}
+
+```
+
+
+
+#### Currents
+
+Cross-shelf processes may influence the retention or displacement of tilefish 
+during early life history stages. These are explored below.
+
+##### Shelf water volume
+
+Shelf water volume: A measure of the volume of water bounded inshore of the
+shelf-slope front. In this analysis, shelf water is defined as all water having 
+salinity <34 psu. The position of the shelf-slope front varies inter-annually
+with the higher shelf water values indicating the front being pushed further 
+towards the shelf break.
+
+high shv: front pushed towards sbf
+low shv: front pushed inshore (more slope water on shelf)
+
+Hypothesis: Higher recruitment success correlated with years of higher shelf 
+water volume in spring/summer. These months months may be particularly 
+important as that is when spawning is occurring and the position of the sbf
+may influence the position of larvae (away from spawning grounds).
+
+Additional variables in this dataset are shelf water temperature and salinity 
+which may also be indicative of habitat conditions. 
+
+
+```{r, s.w.volume}
+
+# Shelf water volume
+shlfvol <- read.csv(here::here('data/shelf_water_volume/ShelfWaterVolume_BSB_update.csv'))
+
+# wrangling date info, converting doy to date and month 
+yrs <- as.vector(nrow(shlfvol))
+shlfvol$Year <- as.character(shlfvol$Year)
+for (i in 1:nrow(shlfvol)){
+  yrs[i] <- strsplit(shlfvol$Year, ".", fixed = TRUE)[[i]][1]
+}
+shlfvol$year <- yrs
+shlfvol <- shlfvol %>% mutate(date_= as.Date(Year.Day-1, 
+                                             origin=paste0(year, "-01-01")), 
+                              month= strftime(date_, "%m"), 
+                              day=strftime(date_,"%d"), 
+                              year = as.integer(year),
+                              month = as.numeric(month))  
+
+
+# Create shw vol by month w/lag
+df.lag = shlfvol %>%
+  group_by(year,month) %>% 
+  summarise(mean_t = mean(ShW.T),
+            mean_s = mean(ShW.S),
+            mean_v = mean(ShW.Vol)) %>% 
+  mutate(mean_t_lag2 = lag(mean_t,2),
+         mean_t_lag3 = lag(mean_t,3), 
+         mean_t_lag6 = lag(mean_t,6),
+         mean_s_lag2 = lag(mean_s,2),
+         mean_s_lag3 = lag(mean_s,3), 
+         mean_s_lag6 = lag(mean_s,6),
+         mean_v_lag2 = lag(mean_v,2),
+         mean_v_lag3 = lag(mean_v,3), 
+         mean_v_lag6 = lag(mean_v,6))
+# Join in-situ bottom temps w/assessment recruitment estimate
+df.join = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, mean_t, mean_s, mean_v, 
+                mean_t_lag2, mean_s_lag2, mean_v_lag2,
+                mean_t_lag3, mean_s_lag3, mean_v_lag3) %>%
+  tidyr::drop_na()
+# See what months have data
+sort(unique(df.join$month))
+hist(df.join$month) # will group into spring/summer fall/winter categories
+## Shelf water volume no lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_v)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water temperature no lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_t)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## Shelf water salinity no lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_s)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+
+ggplot2::ggplot(df.join %>% filter(year >1997 & month %in% c(7,8,9)),
+                aes(x=recruit_est, y=mean_s)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  labs(title = 'Recruitment est x M.S.W July,Aug,Sept (1998:2020)') +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+
+```
+
+With lags
+
+**2 Months**
+
+```{r}
+## Shelf water volume 2 month lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_v_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water temperature  2 month lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_t_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## Shelf water salinity 2 month lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_s_lag2)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity - lag 2 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+```
+
+**3 Months**
+
+
+```{r}
+## Shelf water volume 3 month lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_v_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume - lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water temperature 3 month lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_t_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature - lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## Shelf water salinity 3 month lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_s_lag3)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity - lag 3 months') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+
+```
+
+
+
+Annual 
+
+
+```{r}
+
+# Create shw vol by year w/lag
+df.lag = shlfvol %>%
+  group_by(year) %>% 
+  summarise(mean_t = mean(ShW.T),
+            mean_s = mean(ShW.S),
+            mean_v = mean(ShW.Vol)) %>% 
+  mutate(mean_t_lag2 = lag(mean_t,2),
+         mean_t_lag3 = lag(mean_t,3), 
+         mean_t_lag6 = lag(mean_t,6),
+         mean_s_lag2 = lag(mean_s,2),
+         mean_s_lag3 = lag(mean_s,3), 
+         mean_s_lag6 = lag(mean_s,6),
+         mean_v_lag2 = lag(mean_v,2),
+         mean_v_lag3 = lag(mean_v,3), 
+         mean_v_lag6 = lag(mean_v,6))
+# Join in-situ bottom temps w/assessment recruitment estimate
+df.join = dplyr::full_join(recruit, df.lag, by = join_by(year)) %>%
+  dplyr::select(year,recruit_est, mean_t, mean_s, mean_v, 
+                mean_t_lag2, mean_s_lag2, mean_v_lag2,
+                mean_t_lag3, mean_s_lag3, mean_v_lag3,
+                mean_t_lag6, mean_s_lag6, mean_v_lag6) %>%
+  tidyr::drop_na()
+
+## Shelf water vol 
+
+ggplot2::ggplot(df.join,
+                aes(x=year, y=mean_v)) + 
+  geom_point(color = 'black') +
+  geom_line(color = 'black') +
+  xlab('Year') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume') +
+  theme_bw()
+
+ggplot2::ggplot() + 
+  geom_line(data = df.join, aes(x=year, y=mean_s), color = 'red') +
+  geom_line(data = df.join,aes(x=year, y=mean_t*1), color = 'blue') +
+  ylim(30.0,34.0) +
+  scale_y_continuous(name = 'Sh.Water Salinity', 
+                      sec.axis = sec_axis(~./1, name = 'Sh.Water Temperature')) + 
+  xlab('Year') +
+  labs(title = 'Shelf water salinity/temperature') +
+  theme_bw()
+
+ggplot2::ggplot() + 
+  geom_line(data = df.join, aes(x=year, y=mean_s), color = 'red') +
+  xlab('Year') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity') +
+  theme_bw()
+
+## Shelf water vol no lag
+
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_v)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+
+## Shelf water temperature no lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_t)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+## Shelf water salinity no lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_s)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+
+```
+
+With lags 
+
+```{r}
+
+## Shelf water vol 6 yr lag
+
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_v_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water volume') +
+  labs(title = 'Shelf water volume - lag 6 years') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+
+## Shelf water temperature 6 yr lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_t_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water temperature') +
+  labs(title = 'Shelf water temperature - lag 6 years') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+
+## Shelf water salinity 6 yr lag
+ggplot2::ggplot(df.join,
+                aes(x=recruit_est, y=mean_s_lag6)) + 
+  geom_point(color = 'black') +
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  xlab('Recruitment estimate') +
+  ylab('Mean shelf water salinity') +
+  labs(title = 'Shelf water salinity - lag 6 years') +
+  stat_cor(aes(label=..rr.label..)) +
+  theme_bw()
+print(paste0('correlation: ', round(cor(df.join[,2], df.join[,13]), 4)))
+
+```
+
+
+##### Gulf-stream index
+
+Gulf stream index was calculated based on method presented by 
+Pérez-Hernández and Joyce (2014). The gulf stream index (GSI) is a measure of 
+the degrees latitude above the average Gulf Stream position based on ocean
+temperature at 200m (15 C) depth between 55W to 75W.
+
+Positive values indicate a the mean position of the GS is more Northernly, 
+whereas negative values indicate a more Southernly position. 
+
+```{r}
+# positive are more Northerly, negative are more southernly 
+
+## --- Note below is the original data source, which was modified to include 
+## --- month and then saved as a new file (mm_gsi_1954_2022_chen.csv).
+# gsi.a <- ecodata::gsi
+# gsi.m <- read.csv(here::here('data/gulf_stream_index/Chen_EN4_T200_GSI_1954_2022_monthly - Zhuomin Chen.xlsx - Sheet1.csv'))
+
+# # weird inefficient solution I came up with to get month values (but it works)
+# gsi.m$year <- as.numeric(gsub("(^\\d{4}).*", "\\1", gsi.m$Month))
+# gsi.m$m.1 <- round(str_extract(gsi.m$Month, '\\d+([.,]\\d+)?') %>% as.numeric()- gsi.m$year,2)
+# gsi.m$month <- round(as.numeric(str_extract(gsi.m$m.1, '\\d\\d')))
+# is.na(gsi.m$month) <- 10
+# gsi.m$month <- replace(gsi.m$month, is.na(gsi.m$month), 10)
+# gsi.m <- gsi.m[,-4]
+# # saving so don't have to do that everytime:
+# write.csv(gsi.m, 'mm_gsi_1954_2022_chen.csv') #
+
+
+gsi.m <- read.csv(here::here('data/gulf_stream_index/mm_gsi_1954_2022_chen.csv'))
+
+# df <- dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+#   dplyr::select(year, month, recruit_est, GSI) %>%
+#   filter(month %in% c(3:9)) %>% 
+#   tidyr::pivot_wider(names_from = c(month),
+#                      values_from = c(GSI)) %>% 
+#   rlang::set_names(c('year','recruit_est','Mar', 'Apr', 'May',                                                                   'Jun', 'Jul', 'Aug', 'Sep')) %>% 
+#   tidyr::drop_na()
+
+
+## --- This joins recruit estimate data to GSI data and 
+## --- calculates some summary stats(mean, sd, min, max)
+df <- dplyr::full_join(recruit, gsi.m %>%
+                   group_by(year) %>% 
+                   filter(month %in% c(3:8)) %>% 
+                   summarise(m.gsi = mean(GSI),
+                             sd.gsi = sd(GSI),
+                             max.gsi = max(GSI), 
+                             min.gsi = min(GSI)), 
+                 by = join_by(year)) %>% 
+  mutate(pos = ifelse(m.gsi > 0, 'Northerly', 'Southerly'), 
+         n.pos = ifelse(m.gsi > 0, 1, 0))
+df <- df[-c(51:69),] # this removes rows w/years that don't match 
+# (could/should do this before hand in more standardized way - will do later)
+
+# Plot the time series (mean GSI for the months of interest)
+# -- Note: here I am looking just at March through August assuming these
+# months are the most important to recently spawned individuals 
+ggplot(data = df, 
+       aes(x = year, y = m.gsi)) +
+  geom_line(lwd = 1) +
+  geom_hline(yintercept = 0, lty = 2) +
+  labs(title = 'Mean GS position anomaly March:August',
+       x = 'Year', 
+       y = "Gulf stream position anomaly\n") +
+theme_bw() 
+
+# dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+#   dplyr::select(year, month, recruit_est, GSI) %>%
+#   #filter(month %in% c(3:9)) %>%  
+#   filter(year>1997) %>% 
+#   tidyr::drop_na() %>% 
+#   ggplot2::ggplot(.,aes(x=recruit_est, y=GSI)) + 
+#   geom_point(color = 'black') +
+#   xlab('Recruitment estimate') +
+#   ylab('Gulf stream position anomaly') +
+#   labs(title = 'Gulf stream index') +
+#   geom_hline(yintercept = 0, lty = 2) +
+#   theme_bw()
+
+
+# Looking across all months 
+dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, GSI) %>%
+  #filter(month %in% c(3:9)) %>%  
+  filter(year>1997) %>% 
+  tidyr::drop_na() %>% 
+ggplot2::ggplot(.,aes(x=recruit_est, y=GSI)) + 
+  geom_point(color = 'black') +
+  facet_wrap(~month)+
+  xlab('Recruitment estimate') +
+  ylab('Gulf stream position anomaly') +
+  labs(title = 'Gulf stream index by month') +
+  geom_hline(yintercept = 0, lty = 2) +
+  theme_bw()
+
+# Looking across April through July
+dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, GSI) %>%
+  #filter(month %in% c(3:9)) %>%  
+  filter(year>1997 & month %in% c(4:7)) %>% 
+  tidyr::drop_na() %>% 
+  ggplot2::ggplot(.,aes(x=recruit_est, y=GSI)) + 
+  geom_point(color = 'black') +
+  xlab('Recruitment estimate') +
+  ylab('Gulf stream position anomaly') +
+  labs(title = 'Gulf stream index (Apr:Jul)') +
+  geom_hline(yintercept = 0, lty = 2) +
+  theme_bw()
+
+
+df.cor = dplyr::full_join(recruit, gsi.m, by = join_by(year)) %>%
+  dplyr::select(year, month, recruit_est, GSI) %>%
+  #filter(month %in% c(3:9)) %>%  
+  filter(year>1997 & month %in% c(4:7)) %>% 
+  tidyr::drop_na()
+print(paste0('correlation: ', round(cor(df.cor[,3], df.cor[,4]), 4)))
+ 
+```
+
+
+Should I add a lag? If so, how much? 
+From Nesslage_ea_21:
+For the Northern stock-
+From the original 49 explanatory variables, the final RF model included 10 variables: annual AMO (lagged 5–7 years); December to
+April AMO (lagged 5–7 years); station-based December to February
+NAO (lagged 3 and 4 years); PC-based December to February NAO
+(lagged 4 years), and management time block (Table 1; Figure S3).
+The final GAMM based on backward selection of variables in-
+cluded December to April AMO lagged 7 years and station-based
+December to February NAO lagged 3 and 4 years (Table 1). The
+shapes of the relationships approximated by the RF and GAMM indi-
+cate that golden tilefish landings were higher during negative AMO
+and positive NAO, with their respective lags (Figures 2 and 3). The
+largest range of the smoothed term on the y-axis corresponded with
+December to April AMO lagged 7 years (Figures 2 and 3) and this co-
+variate contributed 52.5% of the GAM R2 (Figure 4), implying AMO has the largest 
+influence on northern landings. In contrast, NAO co-variates at lags of 3 and 4
+years contributed a combined 47.5% of the GAM R2 (Figure 4).
+
+The random forest using the full dataset identified 62 significant
+variables from the original 121 explanatory variables (Table 1), including two
+versions of the AMO (annual and seasonal with each lagged 0–7 years), both 
+seasonal versions of PC-based NAO (each lagged 0–7 years), Labrador Current 
+transport indices (NE Track 191: lagged 0, 4, 9, and 10 quarters), Gulf Stream 
+index of position anomalies (lagged 0, 1, 4–10, and 12 quarters), Gulf stream 
+position indices (lagged 0–3 years), Gulf stream transport index (lagged
+0–3 years), bottom temperature anomalies (lagged 0–2, 4–7 years),
+and time block (Figure S1). The final GAMM for northern CPUE in-
+cluded four variables: annual AMO lagged 6 years, December to
+April AMO lagged 7 years, Gulf Stream index of position anomalies
+lagged 12 quarters, and the Labrador Current transport index for NE
+Track 191 unlagged (Table 1; Figure 5). Annual AMO lagged 6 years
+and December to April AMO lagged 7 years contributed a combined
+64.1% of the GAM R2(Figure 4). Gulf Stream and Labrador Current
+transport indices contributed only 19.7% and 16.2%, respectively, of
+the GAM R2(Figure 4).
+
+```{r}
+
+# recruitment index across all years 
+dplyr::full_join(recruit, gsi.m %>%
+                     group_by(year) %>% 
+                     filter(month %in% c(3:8)) %>% 
+                     summarise(m.gsi = mean(GSI)), 
+                   by = join_by(year)) %>%
+  ggplot2::ggplot(., aes(x=recruit_est, y=m.gsi)) + 
+  geom_point(color = 'black') +
+  geom_hline(yintercept = 0, lty = 2)+
+  labs(title = 'All years') +
+  xlab('Recruitment estimate') +
+  ylab('Gulf stream position anomaly') +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+
+
+# recruitment index across just the years that Paul recommended + el nino 1998  
+
+tt = dplyr::full_join(recruit, gsi.m %>%
+                     group_by(year) %>% 
+                     filter(month %in% c(3:8)) %>% 
+                     summarise(m.gsi = mean(GSI)), 
+                   by = join_by(year)) 
+  ggplot2::ggplot(tt %>% filter(year>1997), aes(x=recruit_est, y=m.gsi)) + 
+  geom_point(color = 'black') +
+  geom_hline(yintercept = 0, lty = 2)+
+  labs(title = '1998:2020, No outliers') +
+  xlab('Recruitment estimate') +
+  ylab('Gulf stream position anomaly') +
+  geom_smooth(method = "lm", formula = y ~ x, size = 1, se = FALSE,
+              aes(colour = 'Linear')) + 
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),
+              size = 1, se = FALSE, aes(colour = 'Quadratic')) + 
+  geom_smooth(method = "loess", formula = y ~ x, 
+              size = 1, se = FALSE, aes(colour = 'Loess')) + 
+  geom_smooth(method = "gam", formula = y ~  s(x), 
+              size = 1, se = FALSE, aes(colour = 'Gam')) + 
+  geom_smooth(method = "gam", formula = y ~ s(x, k = 3),
+              size = 1, se = FALSE, aes(colour = 'Gam2')) +
+  scale_color_manual(name='Model',
+                     breaks=c('Linear', 'Quadratic', 'Loess', 'Gam', 'Gam2'),
+                     values=c('Linear'='black', 'Quadratic'='blue', 
+                              'Loess'='red', 'Gam' = 'green',
+                              'Gam2' = 'purple')) +
+  theme_bw()
+
+
+
+
+
+
+```
+
+
+```{r}
+
+
+
+ggplot(data = df, # add the data
+       aes(x = year, y = m.gsi, # set x, y coordinates
+           color = pos)) +    # color by GS position
+  geom_boxplot() +
+  facet_grid(~pos) + # create panes base on GS position
+  ecodata::theme_facet()
+
+
+
+# this gives main effects AND interactions
+pos_aov <- aov(recruit_est ~ year * pos,
+              data = df)
+
+# look at effects and interactions
+# summary(pos_aov)
+tidy_pos_aov <- broom::tidy(pos_aov)
+tidy_pos_aov
+# write.csv(tidy_pos_aov, 'gs_pos_aov.csv')
+
+
+
+ggplot(data = df, 
+             aes(x = recruit_est/1000, y = m.gsi, fill = pos,  
+                 group = year)) +
+   geom_bar(color = "black", stat = "identity", 
+            position = position_dodge2(preserve = "single"), width = 20) +
+  theme_bw() +
+  labs(title = 'All years',
+       x = "\nRecruitment estimate (x1000)", 
+       y = "Gulf stream position anomaly\n")
+
+ggplot(data = df %>% filter(year <= 1999), 
+       aes(x = recruit_est/1000, y = m.gsi, fill = pos,  
+           group = year)) +
+  geom_bar(color = "black", stat = "identity", 
+           position = position_dodge2(preserve = "single"), width = 40) +
+  theme_bw() +
+  labs(title = '1971:1999',
+       x = "\nRecruitment estimate (x1000)", 
+       y = "Gulf stream position anomaly\n")
+
+ggplot(data = df %>% filter(year >1999), 
+       aes(x = recruit_est/1000, y = m.gsi, fill = pos,  
+           group = year)) +
+  geom_bar(color = "black", stat = "identity", 
+           position = position_dodge2(preserve = "single"), width = 40) +
+  theme_bw() +
+  labs(title = '2000:2020',
+       x = "\nRecruitment estimate (x1000)", 
+       y = "Gulf stream position anomaly\n")
+
+
+
+```
+
+
+
+#### Food availablity 
+
+Larval tilefish eat zooplankton, likely calanus. *Calanus finmarchicus* are a
+copepod (crustacean) with a one-year life cycle and are an important food 
+source for many commercially important species. Calanus spp. are lipid rich, 
+herbivorous species that eat phytoplankton, diatoms in particular 
+(Hobbs et al. 2020).
+
+Diatoms are often represented as microplankton (>20 µm), but many species are of
+the nanoplankton size class (2-20 µm), and a smaller few may even overlap 
+with picoplanton size class (<2 µm).
+
+
+##### Calanus
+
+Calanus is not as common in MAB, need to figure out dominant zooplankton in 
+MAB. 
+
+```{r, c16}
+# Calanus
+calanus <- ecodata::calanus_stage %>% filter(Time %in% c(1998:2021))%>% 
+    rename_all(., .funs = tolower) %>% 
+   mutate(year = time)
+
+
+ggplot() +
+  geom_line(data = calanus %>% filter(epu == 'GB', 
+                                  var == 'adt-Spring'), 
+       aes(x = year , y = value, col = epu), lwd = 1) + 
+  geom_line(data = calanus %>% filter(epu == 'MAB', 
+                                  var == 'adt-Spring'), 
+       aes(x = year , y = value, col = epu), lwd = 1) +
+  labs(color = c('EPU')) +
+  theme_minimal()
+
+```
+
+
+Georges Bank
+
+```{r, c17}
+# GB
+c5.gb <- calanus %>% filter(epu == 'GB', var == 'c5-Spring')
+adult.gb <- calanus %>% filter(epu == 'GB', var == 'adt-Spring' )
+
+df.c5 <- dplyr::full_join(recruit, c5.gb, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, value) %>%
+  tidyr::drop_na()
+df.adt <- dplyr::full_join(recruit, adult.gb, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, value) %>%
+  tidyr::drop_na()
+
+# Regression
+ggscatter(df.c5, x = 'recruit_est', y = 'value', 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Recruitment estimate", 
+          ylab = "Calanus c5 spring (No. per 100m^-3)",
+           title = 'c5')  
+
+ggscatter(df.adt, x = 'recruit_est', y = 'value', 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Recruitment estimate", 
+          ylab = "Calanus adult spring (No. per 100m^-3)",
+           title = 'Adult')  
+# GLM 
+eqn <- as.formula(paste('recruit_est ~', paste(colnames(df.c5)[1], 
+                                               collapse = " + ")))
+
+mod0 <- glm(recruit_est ~ 1, 
+            data = df.c5, 
+            family = "poisson")
+
+mod1 <- glm(eqn, 
+            data = df.c5, 
+            family = "poisson")
+
+summary(mod0)
+summary(mod1)
+AIC(mod0, mod1) %>% dplyr::arrange(AIC)
+
+null_prediction <- exp(predict(mod0))
+mod_prediction <- exp(predict(mod1))
+
+
+plot(df.c5$year, df.c5$recruit_est, type = 'l')
+lines(df.c5$year, null_prediction, col = "gray")
+lines(df.c5$year, mod_prediction, col = "red")
+
+```
+
+
+
+Mid-atlantic 
+
+```{r, c18}
+# Mid-Atlantic Bight
+c5.mab <- calanus %>% filter(epu == 'MAB', var == 'c5-Spring')
+adult.mab <- calanus %>% filter(epu == 'MAB', var == 'adt-Spring' )
+
+df.c5 <- dplyr::full_join(recruit, c5.mab, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, value) %>%
+  tidyr::drop_na()
+df.adt <- dplyr::full_join(recruit, adult.mab, by = join_by(year)) %>%
+  dplyr::select(year, recruit_est, value) %>%
+  tidyr::drop_na()
+
+# Regression
+ggscatter(df.c5, x = 'recruit_est', y = 'value', 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Recruitment estimate", 
+          ylab = "Calanus c5 spring (No. per 100m^-3)",
+           title = 'c5')  
+
+ggscatter(df.adt, x = 'recruit_est', y = 'value', 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Recruitment estimate", 
+          ylab = "Calanus adult spring (No. per 100m^-3)",
+           title = 'Adult')  
+
+
+
+```
+
+
+
+
+##### Microplankton
+
+
+##### Microplankton maps {.tabset}
+
+```{r, micromaps, results='asis'}
+
+# microplankton
+
+```
+
+##### Microplankton analysis
+
+```{r}
+# Microplankton
+```
+
+
+
+
+##### Chlorophyll-A
+```{r}
+
+# CHL-A
+
+```
+
+##### Maps (Chlorophyll-A) {.tabset}
+```{r, chlmaps, results='asis'}
+
+# CHL-A
+
+```
+
+##### Chlorophyll-A analysis
+
+```{r, c21}
+
+# CHL-A
+
+```
+
+
+
+
+##### SST Fronts
+
+```{r}
+# SST fronts
+
+```
+
+##### Maps (SST fronts) {.tabset}
+```{r, sst front maps, results='asis'}
+
+
+```
+
+##### SST Fronts analysis
+
+```{r}
+
+
+```
+
+
+
+
+
+
+References: 
+
+Joyce, Terrence M, Young-Oh Kwon, Hyodae Seo, and Caroline C Ummenhofer. 2019.
+“Meridional Gulf Stream Shifts Can Influence Wintertime Variability in the North 
+Atlantic Storm Track and Greenland Blocking.” 
+Geophysical Research Letters 46 (3): 1702–8. https://doi.org/10.1029/2018GL081087.
+
+Hobbs, L., Banas, N. S., Cottier, F. R., Berge, J., & Daase, M. (2020). Eat or 
+sleep: availability of winter prey explains mid-winter and spring activity in
+an Arctic Calanus population. Frontiers in Marine Science, 7, 541564.
+
+
+
+Pérez-Hernández, M. Dolores, and Terrence M. Joyce. 2014. 
+“Two Modes of Gulf Stream Variability Revealed in the Last 
+Two Decades of Satellite Altimeter Data.” 
+Journal of Physical Oceanography 44 (1): 149–63. https://doi.org/10.1175/JPO-D-13-0136.1.
+
+
+
+
+
+
+
+
+
+
+
+
+
